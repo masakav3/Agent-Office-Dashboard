@@ -214,6 +214,7 @@ function applyWeather(sky, isDay, city, temp) {
   }
   amb.intensity = tod === "night" ? 0.5 : 0.2;        // 夜间抬环境底光，杜绝小人纯黑
   amb.color.setHex(tod === "night" ? 0x8ea0d8 : 0xffffff);
+  screenGlow.color.setRGB(...(tod === "night" ? [0.5, 1.8, 2.4] : [0.95, 1.7, 2.1]));   // 屏幕开机发光(日夜都亮,HDR入Bloom)
   // 阈值调高：只让真正的发光体(屏幕/光盘 HDR>1)晕开，避免被照亮的墙地一起发光糊成一团
   bloom.strength = BLOOM > 0 ? BLOOM : (tod === "night" ? 0.5 : 0.22);
   bloom.radius = tod === "night" ? 0.5 : 0.4;
@@ -361,7 +362,7 @@ function makeFigure(boss) {
   }
   // 脚下身份光盘：主 Agent=荧光红 / 子代理=白（HDR + toneMapped:false → Bloom 晕成霓虹光圈）
   const discMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.72, depthWrite: false, toneMapped: false });
-  discMat.color.setRGB(...(boss ? [2.6, 0.16, 0.4] : [1.7, 1.7, 2.0]));
+  discMat.color.setRGB(...(boss ? [3.8, 0.22, 0.5] : [1.9, 1.9, 2.2]));   // HDR 提亮 → 白天也能 Bloom 发光
   const disc = new THREE.Mesh(new THREE.CircleGeometry(boss ? 0.66 : 0.52, 40), discMat);
   disc.rotation.x = -Math.PI / 2; disc.position.y = 0.06; g.add(disc);
   g.userData = { disc, mixer, clips, boss, phase: Math.random() * 6.28, state: "idle", action: null, curClip: null };
@@ -384,6 +385,24 @@ function makeMonster() {
 // ── 一间办公室：地板 + 两面矮墙 + Kenney 工位（桌+椅+发光屏）────────────
 // 窗屏材质模块级共享：applyWeather 夜间调成 Tokyo 霓虹冷光。
 const screenMat = mat(0x16324a, { emissive: 0x2f9bd6, ei: 0.9 });
+// 显示器"屏幕发光面"：始终亮(开机感) + HDR/toneMapped:false 入 Bloom；applyWeather 调日夜色温
+const screenGlow = new THREE.MeshBasicMaterial({ toneMapped: false, side: THREE.DoubleSide });
+screenGlow.color.setRGB(0.55, 1.5, 2.0);
+// L 形 LED 灯管：颜色 = 主 Agent 状态（HDR 入 Bloom）
+const LED_COLOR = {
+  error: 0xff2d4f,        // 红
+  executing: 0x39c5bb, working: 0x39c5bb,   // 初音绿 = 进行中
+  thinking: 0x4aa8ff,     // 蓝 = 思考中
+  researching: 0xffffff, writing: 0xffffff,  // 白 = tool use
+  waiting: 0xffa33d,      // 橙 = 待授权
+  delegating: 0xbb9af7,   // 紫 = 派活(自定义)
+  idle: 0x6b7280,         // 暗灰 = 待命
+  // automode 预留黄 0xffd23d（暂无信号）
+};
+function setLed(m, state) {
+  const c = new THREE.Color(LED_COLOR[state] || 0x9aa3b2);
+  m.color.setRGB(c.r * 1.8, c.g * 1.8, c.b * 1.8);   // HDR 提亮供 Bloom 晕开
+}
 function buildRoom(accent) {
   const g = new THREE.Group();
   const floor = meshRB(ROOM, 0.16, ROOM, 0.06, mat(accent, { rough: 0.9 }), false, true);
@@ -395,40 +414,47 @@ function buildRoom(accent) {
   wx.position.set(-ROOM / 2 + 0.06, WALL_H / 2 + 0.16, 0); g.add(wx);
   const skirt = meshRB(ROOM, 0.1, 0.14, 0.02, mat(accent, { rough: 0.6 }));
   skirt.position.set(0, 0.5, -ROOM / 2 + 0.07); g.add(skirt);
-  // 工位：1 主(三联屏) + 4 子(单屏)；Kenney desk + 真显示器 computerScreen + chairDesk，人坐椅上朝桌
+  // L 形 LED 灯管：沿 -z / -x 两面墙顶内沿，等墙长；颜色=主 Agent 状态(syncRooms 改 ledMat)
+  const ledMat = new THREE.MeshBasicMaterial({ toneMapped: false });
+  ledMat.color.setRGB(1.5, 1.5, 1.5);
+  const ledY = WALL_H + 0.12;
+  const ledZ = meshRB(ROOM - 0.2, 0.09, 0.09, 0.03, ledMat, false, false);
+  ledZ.position.set(0, ledY, -ROOM / 2 + 0.16); g.add(ledZ);
+  const ledX = meshRB(0.09, 0.09, ROOM - 0.2, 0.03, ledMat, false, false);
+  ledX.position.set(-ROOM / 2 + 0.16, ledY, 0); g.add(ledX);
+  // 工位：土字形居中（主三联屏在最前 + 后面两列 4 子单屏），全员朝 -z(背对镜头/正对显示器)，不靠墙
   const fs = MODELS._fs || 1, FY = 0.16;
-  const dh = (MODELS.desk && MODELS.desk.userData.size.y || 0.38) * fs;   // 桌面高
-  const half = ROOM / 2, WALLPAD = 1.0, SEAT_OFF = 1.05;
+  const dh = (MODELS.desk && MODELS.desk.userData.size.y || 0.38) * fs;
+  const DESK_FWD = 1.05;    // 桌在人前方(-z)的距离
   const seats = [];
-  // [x, z, ry, screens]  ry=0:桌靠后(-z)墙/人朝-z；ry=PI/2:桌靠左(-x)墙/人朝-x。stations[0]=主
+  // [x, z(人位), screens]
   const stations = [
-    [0, -half + WALLPAD, 0, 3],                  // 主：后墙中央，三联屏
-    [-2.9, -half + WALLPAD, 0, 1],               // 子：后墙左
-    [2.9, -half + WALLPAD, 0, 1],                // 子：后墙右
-    [-half + WALLPAD, -1.0, Math.PI / 2, 1],     // 子：左墙上
-    [-half + WALLPAD, 1.8, Math.PI / 2, 1],      // 子：左墙下
+    [0, -1.7, 3],       // 主：最前，三联屏
+    [-1.35, -0.15, 1],  // 子：左前
+    [1.35, -0.15, 1],   // 子：右前
+    [-1.35, 1.35, 1],   // 子：左后
+    [1.35, 1.35, 1],    // 子：右后
   ];
-  stations.forEach(([x, z, ry, screens]) => {
-    const along = ry !== 0;   // true=左墙(沿 z 排), false=后墙(沿 x 排)
+  stations.forEach(([x, z, screens]) => {
     if (MODELS.desk) {
-      const desk = MODELS.desk.clone(); desk.scale.setScalar(fs); desk.position.set(x, FY, z); desk.rotation.y = ry; g.add(desk);
-      for (let s = 0; s < screens; s++) {                 // 真显示器：靠桌内侧(贴墙)、朝坐的人、三联屏沿桌宽排
-        const off = (s - (screens - 1) / 2) * 0.62;
+      const desk = MODELS.desk.clone(); desk.scale.setScalar(fs); desk.position.set(x, FY, z - DESK_FWD); g.add(desk);
+      for (let s = 0; s < screens; s++) {              // 真显示器朝 +z(朝人) + 始终亮的发光屏面
+        const off = (s - (screens - 1) / 2) * 0.64;
         const mon = MODELS.computerScreen.clone(); mon.scale.setScalar(fs * 1.15);
-        mon.position.set(x + (along ? -0.18 : off), FY + dh, z + (along ? off : -0.18));
-        mon.rotation.y = ry; g.add(mon);
+        mon.position.set(x + off, FY + dh, z - DESK_FWD - 0.05); g.add(mon);
+        const glow = new THREE.Mesh(new THREE.PlaneGeometry(0.58, 0.38), screenGlow);
+        glow.position.set(x + off, FY + dh + 0.3, z - DESK_FWD + 0.07); g.add(glow);
       }
       if (MODELS.chairDesk) {
-        const ch = MODELS.chairDesk.clone(); ch.scale.setScalar(fs); ch.rotation.y = ry + Math.PI;
-        ch.position.set(x + (along ? SEAT_OFF : 0), FY, z + (along ? 0 : SEAT_OFF)); g.add(ch);
+        const ch = MODELS.chairDesk.clone(); ch.scale.setScalar(fs); ch.rotation.y = Math.PI; ch.position.set(x, FY, z); g.add(ch);
       }
     } else {   // 回退：程序化桌
       const desk = meshRB(0.95, 0.5, 0.6, 0.06, mat(0xc99a6b, { rough: 0.65 }));
-      desk.position.set(x, 0.41, z); desk.rotation.y = ry; g.add(desk);
+      desk.position.set(x, 0.41, z - DESK_FWD); g.add(desk);
     }
-    seats.push({ x: x + (along ? SEAT_OFF : 0), z: z + (along ? 0 : SEAT_OFF), face: ry + Math.PI });
+    seats.push({ x, z, face: Math.PI });   // 全员朝 -z
   });
-  g.userData = { seats };
+  g.userData = { seats, ledMat };
   return g;
 }
 
@@ -476,14 +502,16 @@ function syncRooms(list) {
       fig.position.set(bseat.x, 0.16, bseat.z);
       fig.rotation.y = bseat.face || 0;          // 朝向显示器
       group.add(fig);
-      rooms.set(r.sessionId, { group, fig, emps: [], monster: null, seats: shell.userData.seats, accent });
+      rooms.set(r.sessionId, { group, fig, emps: [], monster: null, seats: shell.userData.seats, ledMat: shell.userData.ledMat, accent });
     });
   }
   // 更新各房间状态/员工/怪兽
   list.forEach((r) => {
     const room = rooms.get(r.sessionId);
     if (!room) return;
-    setFigState(room.fig, (r.boss && r.boss.state) || "idle");
+    const bossState = (r.boss && r.boss.state) || "idle";
+    setFigState(room.fig, bossState);
+    if (room.ledMat) setLed(room.ledMat, bossState);                            // L 形 LED = 主 Agent 状态
     const want = Math.min((r.employees || []).length, room.seats.length - 1);   // 主位占 seats[0]
     while (room.emps.length < want) {
       const e = makeFigure(false);
@@ -514,7 +542,7 @@ let autoRotate = false;
 function animFig(fig, t, dt) {
   const u = fig.userData;
   if (u.mixer) u.mixer.update(dt);                  // 骨骼动画推进（idle/打字/摇头…）
-  u.disc.material.opacity = 0.5 + 0.32 * (0.5 + 0.5 * Math.sin(t * 3 + u.phase));   // 身份光盘呼吸
+  u.disc.material.opacity = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 3.2 + u.phase));   // 身份光盘闪烁(日夜统一,更明显)
 }
 
 let lastT = 0;
