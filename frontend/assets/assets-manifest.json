@@ -1,0 +1,29 @@
+{
+  "tile": { "w": 64, "h": 32 },
+  "_doc": "字段说明见 docs/asset-prompts.md §7。ready=true 才启用该素材，缺件/false 自动回退到代码画的方块。",
+  "assets": {
+    "floor-carpet":   { "file": "asset-floor-carpet.png",   "type": "floor",     "ready": false },
+    "floor-wood":     { "file": "asset-floor-wood.png",     "type": "floor",     "ready": false },
+    "floor-tile":     { "file": "asset-floor-tile.png",     "type": "floor",     "ready": false },
+    "wall":           { "file": "asset-wall.png",           "type": "wall",      "ready": false },
+    "window":         { "file": "asset-window.png",         "type": "wallmount", "ready": false },
+    "poster":         { "file": "asset-poster.png",         "type": "wallmount", "ready": false },
+    "whiteboard":     { "file": "asset-whiteboard.png",     "type": "wallmount", "ready": false },
+    "desk":           { "file": "asset-desk.png",           "type": "prop", "anchorX": 0.5, "anchorY": 0.88, "wTiles": 2.0, "ready": false },
+    "computer-desk":  { "file": "asset-computer-desk.png",  "type": "prop", "anchorX": 0.5, "anchorY": 0.88, "wTiles": 2.0, "ready": false },
+    "monitors":       { "file": "asset-monitors.png",       "type": "prop", "anchorX": 0.5, "anchorY": 0.85, "wTiles": 2.0, "ready": false },
+    "chair":          { "file": "asset-chair.png",          "type": "prop", "anchorX": 0.5, "anchorY": 0.9,  "wTiles": 0.8, "ready": false },
+    "cabinet":        { "file": "asset-cabinet.png",        "type": "prop", "anchorX": 0.5, "anchorY": 0.9,  "wTiles": 0.7, "ready": false },
+    "lamp":           { "file": "asset-lamp.png",           "type": "prop", "anchorX": 0.5, "anchorY": 0.94, "wTiles": 0.5, "ready": false },
+    "phone":          { "file": "asset-phone.png",          "type": "prop", "anchorX": 0.5, "anchorY": 0.85, "wTiles": 0.35, "ready": false },
+    "trinkets":       { "file": "asset-trinkets.png",       "type": "prop", "anchorX": 0.5, "anchorY": 0.85, "wTiles": 0.45, "ready": false },
+    "gundam":         { "file": "asset-gundam.png",         "type": "prop", "anchorX": 0.5, "anchorY": 0.92, "wTiles": 0.6, "ready": false },
+    "plant-small":    { "file": "asset-plant-small.png",    "type": "prop", "anchorX": 0.5, "anchorY": 0.88, "wTiles": 0.4, "ready": false },
+    "plant-big":      { "file": "asset-plant-big.png",      "type": "prop", "anchorX": 0.5, "anchorY": 0.92, "wTiles": 0.9, "ready": false },
+    "coffee-machine": { "file": "asset-coffee-machine.png", "type": "prop", "anchorX": 0.5, "anchorY": 0.9,  "wTiles": 0.9, "ready": false },
+    "sofa":           { "file": "asset-sofa.png",           "type": "prop", "anchorX": 0.5, "anchorY": 0.88, "wTiles": 1.6, "ready": false },
+    "round-table":    { "file": "asset-round-table.png",    "type": "prop", "anchorX": 0.5, "anchorY": 0.85, "wTiles": 1.4, "ready": false },
+    "fridge":         { "file": "asset-fridge.png",         "type": "prop", "anchorX": 0.5, "anchorY": 0.92, "wTiles": 0.7, "ready": false },
+    "stool":          { "file": "asset-stool.png",          "type": "prop", "anchorX": 0.5, "anchorY": 0.9,  "wTiles": 0.5, "ready": false }
+  }
+}
