@@ -80,19 +80,25 @@
     body[data-tod="night"] header .badge { background: rgba(255,255,255,.14); }
     header .sub { font-size: 12px; opacity: .68; margin-top: 4px; }
 
-    .legend { top: 22px; right: 26px; display: flex; flex-wrap: wrap; gap: 6px 12px;
-      max-width: 360px; justify-content: flex-end; font-size: 11.5px; opacity: .9; }
-    .legend .it { display: inline-flex; align-items: center; gap: 5px; }
+    .legend { top: 16px; left: 50%; transform: translateX(-50%); display: flex; flex-wrap: wrap;
+      gap: 6px 13px; justify-content: center; align-items: center; max-width: 94vw; font-size: 11.5px;
+      padding: 8px 18px; border-radius: 999px; background: rgba(255, 255, 255, 0.42);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+    body[data-tod="night"] .legend { background: rgba(24, 26, 40, 0.5); }
+    .legend .it { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
     .legend .dot { width: 9px; height: 9px; border-radius: 3px; box-shadow: 0 0 7px currentColor; }
+    .legend .led { width: 16px; height: 7px; border-radius: 3px; }
+    .legend .sep { width: 1px; height: 14px; background: currentColor; opacity: .22; margin: 0 4px; }
 
-    /* 墙顶 LED 状态图例（左侧） */
-    .ledlegend { top: 100px; left: 26px; display: flex; flex-direction: column; gap: 5px;
-      font-size: 11.5px; padding: 10px 13px; border-radius: 12px;
-      background: rgba(255, 255, 255, 0.42); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-    body[data-tod="night"] .ledlegend { background: rgba(24, 26, 40, 0.5); }
-    .ledlegend .lt { font-weight: 700; font-size: 10.5px; opacity: .62; letter-spacing: .4px; margin-bottom: 2px; }
-    .ledlegend .li { display: flex; align-items: center; gap: 8px; }
-    .ledlegend .ls { width: 18px; height: 7px; border-radius: 3px; border: 1px solid rgba(0, 0, 0, .18); flex: none; }
+    /* 天气小卡（右上，契合微缩景观） */
+    .weather { top: 16px; right: 26px; display: flex; align-items: center; gap: 10px;
+      padding: 8px 15px; border-radius: 16px; background: rgba(255, 255, 255, 0.42);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+    body[data-tod="night"] .weather { background: rgba(24, 26, 40, 0.5); }
+    .weather .wic { font-size: 24px; line-height: 1; }
+    .weather .wtx { display: flex; flex-direction: column; line-height: 1.3; }
+    .weather .wtx b { font-size: 13px; font-weight: 700; }
+    .weather .wtx span { font-size: 10.5px; opacity: .68; letter-spacing: .2px; }
 
     .hint { bottom: 18px; left: 50%; transform: translateX(-50%); font-size: 12px; opacity: .6;
       display: flex; gap: 16px; }
@@ -129,12 +135,10 @@
   <div class="tilt bottom"></div>
 
   <header class="ui">
-    <div class="title">Claude Office <span class="badge">3D 微缩原型</span></div>
-    <div class="sub">真 3D · 正交 iso · 软阴影 · 移轴景深 · 暖色调 —— 读真实 /cc/rooms</div>
+    <div class="title">Claude Office <span class="badge">3D 微缩</span></div>
   </header>
 
   <div class="ui legend" id="legend"></div>
-  <div class="ui ledlegend" id="ledlegend"></div>
 
   <div class="ui controls">
     <button id="btnRotate" aria-pressed="false">自转</button>

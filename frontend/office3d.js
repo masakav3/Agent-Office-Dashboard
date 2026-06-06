@@ -186,8 +186,7 @@ flashEl.style.cssText = "position:fixed;inset:0;background:#eaf2ff;opacity:0;poi
 document.body.appendChild(flashEl);
 let stormFlash = false, flashCd = 3, flashDecay = 0;
 const skyBadge = document.createElement("div");
-skyBadge.className = "ui";
-skyBadge.style.cssText = "top:64px;left:26px;font-size:13px;font-weight:600;opacity:.82";
+skyBadge.className = "ui weather";
 document.body.appendChild(skyBadge);
 
 let curSky = "", curTod = "";
@@ -233,7 +232,11 @@ function applyWeather(sky, isDay, city, temp) {
   curSky = key; curTod = tod;
   stormFlash = !!c.flash; if (!stormFlash) flashEl.style.opacity = "0";
   const ic = { clear: "☀️", partly: "⛅", cloudy: "☁️", fog: "🌫️", rain: "🌧️", storm: "⛈️", snow: "❄️" }[key] || "☀️";
-  skyBadge.textContent = `${ic} ${city || ""}${temp != null ? " " + Math.round(temp) + "°" : ""} · ${tod === "night" ? "夜" : "日"}`;
+  const cond = { clear: "晴", partly: "多云", cloudy: "阴", fog: "雾", rain: "雨", storm: "雷暴", snow: "雪" }[key] || "晴";
+  skyBadge.innerHTML =
+    `<span class="wic">${ic}</span>` +
+    `<span class="wtx"><b>${city || "Office"}${temp != null ? "　" + Math.round(temp) + "°" : ""}</b>` +
+    `<span>${cond} · ${tod === "night" ? "🌙 夜间" : "☀ 白天"}</span></span>`;
 }
 
 // 调试参数（URL query，便于实时拨参对比）：
@@ -664,25 +667,18 @@ preloadModels()
   .finally(() => { pollRooms(); setInterval(pollRooms, POLL_MS); });
 
 // ── UI 浮层 ───────────────────────────────────────────────────────────
+// 顶部居中横排图例：主/子身份 + 墙顶 LED 状态(颜色对齐 LED_COLOR) 拼一行
 const legend = document.getElementById("legend");
-legend.innerHTML =
-  '<span class="it"><span class="dot" style="background:#ff2d4f;color:#ff2d4f"></span>主 Agent</span>' +
-  '<span class="it"><span class="dot" style="background:#ffffff;color:#ffffff"></span>子代理</span>';
-
-// 墙顶 LED 状态图例（颜色对齐 LED_COLOR）
 const LED_LEGEND = [
-  ["#39c5bb", "进行中 executing"],
-  ["#4aa8ff", "思考中 thinking"],
-  ["#ffffff", "工具调用 tool-use"],
-  ["#ffa33d", "待授权 waiting"],
-  ["#bb9af7", "派活 delegating"],
-  ["#ff2d4f", "出错 error"],
-  ["#ffd23d", "automode 自动模式"],
-  ["#6b7280", "待命 idle"],
+  ["#39c5bb", "进行中"], ["#4aa8ff", "思考中"], ["#ffffff", "工具调用"], ["#ffa33d", "待授权"],
+  ["#bb9af7", "派活"], ["#ff2d4f", "出错"], ["#ffd23d", "automode"], ["#6b7280", "待命"],
 ];
-document.getElementById("ledlegend").innerHTML =
-  '<div class="lt">墙顶 LED · 主 Agent 状态</div>' +
-  LED_LEGEND.map(([c, l]) => `<span class="li"><span class="ls" style="background:${c};box-shadow:0 0 9px ${c},0 0 4px ${c}"></span>${l}</span>`).join("");
+legend.innerHTML =
+  '<span class="it"><span class="dot" style="background:#ff2d4f;color:#ff2d4f"></span>👑 主 Agent</span>' +
+  '<span class="it"><span class="dot" style="background:#ffffff;color:#ffffff"></span>子代理</span>' +
+  '<span class="sep"></span>' +
+  '<span class="it" style="opacity:.6">墙顶 LED</span>' +
+  LED_LEGEND.map(([c, l]) => `<span class="it"><span class="led" style="background:${c};box-shadow:0 0 8px ${c}"></span>${l}</span>`).join("");
 const btnRotate = document.getElementById("btnRotate");
 btnRotate.addEventListener("click", () => {
   autoRotate = !autoRotate; btnRotate.setAttribute("aria-pressed", String(autoRotate));
