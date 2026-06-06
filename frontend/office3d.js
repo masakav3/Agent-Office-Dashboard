@@ -389,7 +389,7 @@ const screenMat = mat(0x16324a, { emissive: 0x2f9bd6, ei: 0.9 });
 // 显示器"屏幕发光面"：始终亮(开机感) + HDR/toneMapped:false 入 Bloom；applyWeather 调日夜色温
 const screenGlow = new THREE.MeshBasicMaterial({ toneMapped: false, side: THREE.DoubleSide });
 screenGlow.color.setRGB(0.55, 1.5, 2.0);
-const SCREEN_GEO = new THREE.PlaneGeometry(0.3, 0.19);    // 贴显示器屏面的发光片(屏内尺寸,本地)
+const SCREEN_GEO = new THREE.PlaneGeometry(0.34, 0.215);  // 贴显示器屏面的发光片(屏内尺寸,本地)
 // L 形 LED 灯管：颜色 = 主 Agent 状态（HDR 入 Bloom）
 const LED_COLOR = {
   error: 0xff2d4f,        // 红
@@ -447,7 +447,7 @@ function buildRoom(accent) {
         const mon = MODELS.computerScreen.clone(); mon.scale.setScalar(fs * 1.15);
         mon.position.set(x + off, FY + dh, z - DESK_FWD - 0.05);
         const glow = new THREE.Mesh(SCREEN_GEO, screenGlow);
-        glow.position.set(0, 0.15, 0.046); glow.rotation.x = -0.12;   // 贴合屏面:更贴近 + 配屏幕小倾角
+        glow.position.set(0, 0.15, 0.03); glow.rotation.x = -0.12;    // 贴合屏面:Z更贴近(0.03) + 配屏幕小倾角
         mon.add(glow);
         g.add(mon);
       }
