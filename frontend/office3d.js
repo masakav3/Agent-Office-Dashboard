@@ -316,9 +316,9 @@ function snowPatch() {
   const m = new THREE.Mesh(new THREE.CircleGeometry(0.3 + Math.random() * 0.35, 14), mat(0xeef4ff, { rough: .95 }));
   m.rotation.x = -Math.PI / 2; return m;
 }
-function leafOnGround() {
-  const c = [0xc0392b, 0xe07b39, 0xd9a441][Math.floor(Math.random() * 3)];
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.12), new THREE.MeshStandardMaterial({ color: c, roughness: 1, side: THREE.DoubleSide }));
+function leafOnGround() {       // 地面枫叶 🍁(告别方块)
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34),
+    new THREE.MeshBasicMaterial({ map: leafTex("🍁"), transparent: true, alphaTest: 0.1, side: THREE.DoubleSide }));
   m.rotation.x = -Math.PI / 2; m.rotation.z = Math.random() * 6.28; return m;
 }
 function snowmanProp() {
@@ -364,10 +364,19 @@ function butterflyMesh() {
   const R = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.26), wm); R.position.x = 0.1;
   g.add(L, R); g.userData = { L, R }; return g;
 }
-function flyLeaf(autumn) {
-  const cols = autumn ? [0xd9622b, 0xc0392b, 0xe0a33a] : [0x5aa84f, 0x6fbf5f];
-  return new THREE.Mesh(new THREE.PlaneGeometry(0.17, 0.11),
-    new THREE.MeshStandardMaterial({ color: cols[Math.floor(Math.random() * cols.length)], roughness: 1, side: THREE.DoubleSide }));
+const _leafTex = {};
+function leafTex(emoji) {     // emoji → canvas 贴图(缓存)，给叶子/枫叶切出真实叶形
+  if (_leafTex[emoji]) return _leafTex[emoji];
+  const cv = document.createElement("canvas"); cv.width = cv.height = 64;
+  const g = cv.getContext("2d");
+  g.font = "52px 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',serif";
+  g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(emoji, 32, 36);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
+  _leafTex[emoji] = t; return t;
+}
+function flyLeaf(autumn) {     // 🍃绿叶 / 🍁枫叶 贴图(告别方块)
+  return new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34),
+    new THREE.MeshBasicMaterial({ map: leafTex(autumn ? "🍁" : "🍃"), transparent: true, alphaTest: 0.1, side: THREE.DoubleSide }));
 }
 function makeFlyers() {
   seasonFlyers.forEach((f) => scene.remove(f.mesh)); seasonFlyers = [];
