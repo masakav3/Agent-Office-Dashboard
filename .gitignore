@@ -14,6 +14,7 @@ venv/
 # Runtime state (local only)
 state.json
 agents-state.json
+cc-rooms.json
 runtime-config.json
 *.log
 *.out
