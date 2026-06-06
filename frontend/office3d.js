@@ -236,7 +236,7 @@ function applyWeather(sky, isDay, city, temp) {
   skyBadge.innerHTML =
     `<span class="wic">${ic}</span>` +
     `<span class="wtx"><b>${city || "Office"}${temp != null ? "　" + Math.round(temp) + "°" : ""}</b>` +
-    `<span>${cond} · ${tod === "night" ? "🌙 夜间" : "☀ 白天"}</span></span>`;
+    `<span>${cond} · ${tod === "night" ? "🌙 夜间" : "☀ 白天"} · ${SEASON_ICON}</span></span>`;
 }
 
 // 调试参数（URL query，便于实时拨参对比）：
@@ -286,6 +286,121 @@ studio.position.y = -0.6;
 studio.receiveShadow = true;
 scene.add(studio);
 
+// ── 四季底座植被（春花夏草秋叶冬雪 + 飞舞元素）────────────────────────────
+const SEASON = (() => {
+  const q = new URLSearchParams(location.search).get("season");
+  if (["spring", "summer", "autumn", "winter"].includes(q)) return q;
+  const m = new Date().getMonth();   // 0-11，北半球
+  return (m === 11 || m <= 1) ? "winter" : m <= 4 ? "spring" : m <= 7 ? "summer" : "autumn";
+})();
+const SEASON_ICON = { spring: "🌸 春", summer: "🌿 夏", autumn: "🍁 秋", winter: "⛄ 冬" }[SEASON];
+
+function grassTuft(col) {
+  const g = new THREE.Group(), m = mat(col, { rough: 1 });
+  for (let i = 0; i < 3; i++) {
+    const b = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.18 + Math.random() * 0.12, 4), m);
+    b.position.set((Math.random() - .5) * 0.14, 0.1, (Math.random() - .5) * 0.14);
+    b.rotation.z = (Math.random() - .5) * 0.5; g.add(b);
+  }
+  return g;
+}
+function flowerProp() {
+  const g = new THREE.Group();
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.16, 4), mat(0x4f9a52, { rough: 1 }));
+  stem.position.y = 0.08; g.add(stem);
+  const c = [0xff6b9d, 0xffd23d, 0xffffff, 0xb47cff, 0xff8e5e][Math.floor(Math.random() * 5)];
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), mat(c, { rough: .8 }));
+  head.position.y = 0.18; g.add(head); return g;
+}
+function snowPatch() {
+  const m = new THREE.Mesh(new THREE.CircleGeometry(0.3 + Math.random() * 0.35, 14), mat(0xeef4ff, { rough: .95 }));
+  m.rotation.x = -Math.PI / 2; return m;
+}
+function leafOnGround() {
+  const c = [0xc0392b, 0xe07b39, 0xd9a441][Math.floor(Math.random() * 3)];
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.12), new THREE.MeshStandardMaterial({ color: c, roughness: 1, side: THREE.DoubleSide }));
+  m.rotation.x = -Math.PI / 2; m.rotation.z = Math.random() * 6.28; return m;
+}
+function snowmanProp() {
+  const g = new THREE.Group(), w = mat(0xf4f8ff, { rough: .9 });
+  const b1 = new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 10), w); b1.position.y = 0.24; g.add(b1);
+  const b2 = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 10), w); b2.position.y = 0.6; g.add(b2);
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.15, 6), mat(0xff8c2b, { rough: .7 }));
+  nose.rotation.x = Math.PI / 2; nose.position.set(0, 0.62, 0.18); g.add(nose);
+  [-0.06, 0.06].forEach((x) => { const e = new THREE.Mesh(new THREE.SphereGeometry(0.022, 6, 6), mat(0x222222)); e.position.set(x, 0.66, 0.15); g.add(e); });
+  return g;
+}
+function decorateBaseSeason(slab, w, d) {
+  const grp = new THREE.Group(); grp.position.y = -0.49;     // 草坪表面(slab 本地)
+  const hw = w / 2, hd = d / 2, band = 0.55;
+  const N = Math.max(22, Math.round((w + d) * 1.7));
+  const SUM = [0x4f9a52, 0x3e8e44, 0x5aa84f], AUT = [0xc99a3a, 0xb5722e, 0x9a8b3a];
+  const edge = () => {                                       // 草坪环带随机取点
+    const t = Math.random() * 2 - 1, e = Math.floor(Math.random() * 4), o = band * (0.1 + Math.random() * 0.85);
+    if (e === 0) return [t * (hw + band), hd + o];
+    if (e === 1) return [t * (hw + band), -(hd + o)];
+    if (e === 2) return [hw + o, t * (hd + band)];
+    return [-(hw + o), t * (hd + band)];
+  };
+  for (let i = 0; i < N; i++) {
+    const [x, z] = edge(); let obj;
+    if (SEASON === "winter") { if (Math.random() < 0.6) obj = snowPatch(); else continue; }   // 冬:积雪+光秃
+    else if (SEASON === "spring") obj = Math.random() < 0.5 ? flowerProp() : grassTuft(0x6fbf73);
+    else if (SEASON === "autumn") obj = Math.random() < 0.55 ? grassTuft(AUT[i % 3]) : leafOnGround();
+    else obj = grassTuft(SUM[i % 3]);                                                         // 夏:草丛
+    obj.position.set(x, 0, z); grp.add(obj);
+  }
+  if (SEASON === "winter") { const sm = snowmanProp(); sm.position.set(hw + 0.3, 0, hd + 0.3); grp.add(sm); }
+  slab.add(grp);
+}
+
+// 飞舞元素：春蝴蝶 / 夏绿叶 / 秋枫叶飘落
+let seasonFlyers = [];
+function butterflyMesh() {
+  const g = new THREE.Group();
+  const c = [0xff7eb6, 0xffd23d, 0x7ec8ff, 0xff9e64][Math.floor(Math.random() * 4)];
+  const wm = new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide, toneMapped: false });
+  const L = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.26), wm); L.position.x = -0.1;
+  const R = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.26), wm); R.position.x = 0.1;
+  g.add(L, R); g.userData = { L, R }; return g;
+}
+function flyLeaf(autumn) {
+  const cols = autumn ? [0xd9622b, 0xc0392b, 0xe0a33a] : [0x5aa84f, 0x6fbf5f];
+  return new THREE.Mesh(new THREE.PlaneGeometry(0.17, 0.11),
+    new THREE.MeshStandardMaterial({ color: cols[Math.floor(Math.random() * cols.length)], roughness: 1, side: THREE.DoubleSide }));
+}
+function makeFlyers() {
+  seasonFlyers.forEach((f) => scene.remove(f.mesh)); seasonFlyers = [];
+  let n = 0, kind = "";
+  if (SEASON === "spring") { n = 9; kind = "butterfly"; }
+  else if (SEASON === "summer") { n = 7; kind = "leaf"; }
+  else if (SEASON === "autumn") { n = 14; kind = "leaf"; }
+  else return;   // 冬:飘雪交给天气系统
+  for (let i = 0; i < n; i++) {
+    const mesh = kind === "butterfly" ? butterflyMesh() : flyLeaf(SEASON === "autumn");
+    mesh.position.set((Math.random() * 2 - 1) * 15, 1 + Math.random() * 4, (Math.random() * 2 - 1) * 15);
+    scene.add(mesh);
+    seasonFlyers.push({ mesh, kind, ph: Math.random() * 6.28, sp: 0.4 + Math.random() * 0.6 });
+  }
+}
+function stepFlyers(dt, t) {
+  for (const f of seasonFlyers) {
+    const p = f.mesh.position;
+    if (f.kind === "butterfly") {                       // 蝴蝶:绕飞+起伏+扇翅
+      p.x += Math.cos(t * f.sp + f.ph) * dt * 1.4;
+      p.z += Math.sin(t * f.sp * 1.3 + f.ph) * dt * 1.4;
+      p.y = 1.6 + Math.sin(t * 2 + f.ph) * 0.6;
+      f.mesh.rotation.y = t * f.sp + f.ph;
+      const flap = 0.5 + 0.7 * Math.abs(Math.sin(t * 11 + f.ph));
+      f.mesh.userData.L.rotation.y = flap; f.mesh.userData.R.rotation.y = -flap;
+    } else {                                            // 叶子:飘落+翻转,落地回到高空
+      p.y -= dt * (0.5 + f.sp); p.x += Math.sin(t + f.ph) * dt * 0.7;
+      f.mesh.rotation.x += dt * 2.2; f.mesh.rotation.z += dt * 1.4;
+      if (p.y < 0.2) { p.y = 4 + Math.random() * 2.5; p.x = (Math.random() * 2 - 1) * 15; p.z = (Math.random() * 2 - 1) * 15; }
+    }
+  }
+}
+
 let baseSlab = null;
 function buildBase(cols, rows) {
   if (baseSlab) { scene.remove(baseSlab); baseSlab.geometry.dispose(); }
@@ -297,6 +412,7 @@ function buildBase(cols, rows) {
   const lawn = meshRB(w + 1.4, 0.55, d + 1.4, 0.2, mat(0x9cc08a, { rough: 1 }), false, true);
   lawn.position.y = -0.78;
   baseSlab.add(lawn);
+  decorateBaseSeason(baseSlab, w, d);     // 四季底座植被
 }
 
 // ── Kenney CC0 资产：GLTF 模型加载 + 按状态播骨骼动画 ────────────────────
@@ -613,6 +729,7 @@ function loop() {
     }
   }
   stepWeather(dt, t);                                   // 雨雪下落
+  stepFlyers(dt, t);                                    // 四季飞舞(蝴蝶/落叶)
   if (stormFlash) {                                     // 雷暴闪电
     flashCd -= dt;
     if (flashCd <= 0) { flashEl.style.opacity = "0.5"; flashDecay = 0.16; flashCd = 3 + Math.random() * 7; }
@@ -661,6 +778,7 @@ async function pollWeather() {
 }
 pollWeather();
 setInterval(pollWeather, 300000);
+makeFlyers();                                  // 四季飞舞元素(春蝴蝶/夏绿叶/秋枫叶)
 // 先预加载 Kenney 模型，再开始建房间（加载失败则回退程序化占位，不阻塞）
 preloadModels()
   .catch((e) => { /* 模型加载失败：makeFigure/buildRoom 自动回退占位 */ })
