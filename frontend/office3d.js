@@ -213,6 +213,7 @@ function applyWeather(sky, isDay, city, temp) {
   }
   amb.intensity = tod === "night" ? 0.5 : 0.2;        // 夜间抬环境底光，杜绝小人纯黑
   amb.color.setHex(tod === "night" ? 0x8ea0d8 : 0xffffff);
+  applyGround(tod);                                    // 四季底座配色按昼夜切换
   screenGlow.color.setRGB(...(tod === "night" ? [0.5, 1.8, 2.4] : [0.95, 1.7, 2.1]));   // 屏幕开机发光(日夜都亮,HDR入Bloom)
   // 阈值调高：只让真正的发光体(屏幕/光盘 HDR>1)晕开，避免被照亮的墙地一起发光糊成一团
   bloom.strength = BLOOM > 0 ? BLOOM : (tod === "night" ? 0.35 : 0.3);   // 夜降到0.35(不过曝)/日提到0.3(LED也晕开)
@@ -294,6 +295,17 @@ const SEASON = (() => {
   return (m === 11 || m <= 1) ? "winter" : m <= 4 ? "spring" : m <= 7 ? "summer" : "autumn";
 })();
 const SEASON_ICON = { spring: "🌸 春", summer: "🌿 夏", autumn: "🍁 秋", winter: "⛄ 冬" }[SEASON];
+
+// 四季底座(草坪)配色 day/night —— 共享材质，applyWeather 按昼夜切换
+const lawnMat = new THREE.MeshStandardMaterial({ roughness: 1 });
+const GROUND = {
+  spring: { day: 0x8fd16f, night: 0x33603e },   // 草绿
+  summer: { day: 0x3e8e44, night: 0x1f4530 },   // 深绿
+  autumn: { day: 0xc7a24e, night: 0x5c4a26 },   // 枯黄
+  winter: { day: 0x9298a1, night: 0x3a3f4a },   // 深灰
+};
+lawnMat.color.setHex((GROUND[SEASON] || GROUND.summer).day);
+function applyGround(tod) { lawnMat.color.setHex((GROUND[SEASON] || GROUND.summer)[tod]); }
 
 function grassTuft(col) {
   const g = new THREE.Group(), m = mat(col, { rough: 1 });
@@ -418,7 +430,7 @@ function buildBase(cols, rows) {
   baseSlab.position.y = -0.5;
   scene.add(baseSlab);
   // 草坪边沿
-  const lawn = meshRB(w + 1.4, 0.55, d + 1.4, 0.2, mat(0x9cc08a, { rough: 1 }), false, true);
+  const lawn = meshRB(w + 1.4, 0.55, d + 1.4, 0.2, lawnMat, false, true);   // 四季配色(共享 lawnMat)
   lawn.position.y = -0.78;
   baseSlab.add(lawn);
   decorateBaseSeason(baseSlab, w, d);     // 四季底座植被
