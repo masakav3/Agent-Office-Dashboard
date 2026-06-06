@@ -353,22 +353,12 @@ function decorateBaseSeason(slab, w, d) {
   for (let i = 0; i < N; i++) {
     const [x, z] = edge(); let obj;
     if (SEASON === "winter") { if (Math.random() < 0.6) obj = snowPatch(); else continue; }   // 冬:积雪+光秃
-    else if (SEASON === "spring") obj = Math.random() < 0.5 ? flowerProp() : grassTuft(0x6fbf73);
-    else if (SEASON === "autumn") obj = Math.random() < 0.55 ? grassTuft(AUT[i % 3]) : leafOnGround();
+    else if (SEASON === "spring") obj = grassTuft(0x6fbf73);     // 花朵 emoji 立牌移除(嵌墙),留草丛
+    else if (SEASON === "autumn") obj = grassTuft(AUT[i % 3]);   // 地面枫叶 emoji 移除,留枯草丛
     else obj = grassTuft(SUM[i % 3]);                                                         // 夏:草丛
     obj.position.set(x, 0, z); grp.add(obj);
   }
-  if (SEASON === "winter") { const sm = emojiBillboard("⛄", 1.2); sm.position.set(hw + 0.3, 0, hd + 0.3); grp.add(sm); }
-  if (SEASON === "autumn") {                    // 角落堆一堆枯叶(土堆 + 🍁 簇拥)
-    const pile = new THREE.Group(); pile.position.set(hw + 0.2, 0, hd + 0.2);
-    const mound = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), mat(0x9a6630, { rough: 1 }));
-    mound.scale.y = 0.5; pile.add(mound);
-    for (let i = 0; i < 16; i++) {
-      const lf = emojiBillboard("🍁", 0.42, 0.08 + Math.random() * 0.4);
-      lf.position.set((Math.random() - .5) * 1.0, 0, (Math.random() - .5) * 1.0); pile.add(lf);
-    }
-    grp.add(pile);
-  }
+  if (SEASON === "winter") { const sm = emojiBillboard("⛄", 1.2, 0.42); sm.position.set(hw + 0.3, 0, hd + 0.3); grp.add(sm); }   // 雪人下移贴底座
   slab.add(grp);
 }
 
@@ -401,7 +391,7 @@ function flyLeaf(autumn) {     // 🍃绿叶 / 🍁枫叶 贴图(告别方块)
 function makeFlyers() {
   seasonFlyers.forEach((f) => scene.remove(f.mesh)); seasonFlyers = [];
   let n = 0, kind = "";
-  if (SEASON === "spring") { n = 9; kind = "butterfly"; }
+  if (SEASON === "spring") { n = 3; kind = "butterfly"; }
   else if (SEASON === "summer") { n = 7; kind = "leaf"; }
   else if (SEASON === "autumn") { n = 14; kind = "leaf"; }
   else return;   // 冬:飘雪交给天气系统
