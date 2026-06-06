@@ -2262,8 +2262,8 @@ def cc_rooms():
 
 @app.route("/office", methods=["GET"])
 def office_page():
-    """Claude Code 多办公室看板（Phase 2）。"""
-    with open(os.path.join(FRONTEND_DIR, "office.html"), "r", encoding="utf-8") as f:
+    """Claude Code 多办公室看板（3D 微缩版 office3d）。"""
+    with open(os.path.join(FRONTEND_DIR, "office3d.html"), "r", encoding="utf-8") as f:
         html = f.read()
     html = html.replace("{{VERSION_TIMESTAMP}}", VERSION_TIMESTAMP)
     resp = make_response(html)
