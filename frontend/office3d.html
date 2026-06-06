@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Claude Office · 3D 微缩原型</title>
+  <style>
+    :root {
+      /* 暖色胶片调色锚点（富士/徕卡向）—— 通透、低饱、暖白平衡 */
+      --grade-saturate: 1.06;
+      --grade-contrast: 1.04;
+      --grade-brightness: 1.02;
+      --vignette: rgba(20, 16, 10, 0.42);
+      --tilt-blur: 3.2px;
+      --tilt-band: 20%;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+    body {
+      font-family: -apple-system, "PingFang SC", "Helvetica Neue", system-ui, sans-serif;
+      background: radial-gradient(120% 120% at 50% 18%, #f4ede0 0%, #e7ddcb 46%, #d3c6ad 100%);
+      transition: background 1.2s ease;
+    }
+    /* 夜间：暖灯、压暗、室内屏幕更亮 */
+    body[data-tod="night"] {
+      background: radial-gradient(120% 120% at 50% 16%, #2a2740 0%, #1d1b2e 52%, #12111d 100%);
+      --vignette: rgba(4, 3, 10, 0.62);
+    }
+
+    #stage { position: fixed; inset: 0; }
+    #scene { display: block; width: 100%; height: 100%; }
+
+    /* —— 后期调色层（覆盖在 canvas 上，不拦截鼠标）—— */
+    .grade {
+      position: fixed; inset: 0; pointer-events: none; z-index: 5;
+    }
+    /* 暖色 + 对比，整体胶片化 */
+    .grade.tone {
+      backdrop-filter: saturate(var(--grade-saturate)) contrast(var(--grade-contrast)) brightness(var(--grade-brightness));
+      -webkit-backdrop-filter: saturate(var(--grade-saturate)) contrast(var(--grade-contrast)) brightness(var(--grade-brightness));
+    }
+    /* 暖光叠加（柔光），给富士那种奶油暖调 */
+    .grade.warm {
+      background: linear-gradient(180deg, rgba(255, 214, 150, 0.10), rgba(255, 180, 120, 0.04) 40%, rgba(120, 150, 255, 0.05));
+      mix-blend-mode: soft-light;
+    }
+    body[data-tod="night"] .grade.warm {
+      background: linear-gradient(180deg, rgba(255, 170, 90, 0.14), rgba(120, 90, 200, 0.10));
+    }
+    /* 暗角 */
+    .grade.vignette {
+      background: radial-gradient(120% 90% at 50% 46%, transparent 52%, var(--vignette) 100%);
+    }
+    /* —— 移轴：上下两条渐隐模糊带，模拟微缩景深 —— */
+    .tilt {
+      position: fixed; left: 0; right: 0; pointer-events: none; z-index: 6;
+      height: var(--tilt-band);
+      backdrop-filter: blur(var(--tilt-blur));
+      -webkit-backdrop-filter: blur(var(--tilt-blur));
+    }
+    .tilt.top { top: 0; mask-image: linear-gradient(to bottom, #000 0%, transparent 100%);
+      -webkit-mask-image: linear-gradient(to bottom, #000 0%, transparent 100%); }
+    .tilt.bottom { bottom: 0; mask-image: linear-gradient(to top, #000 0%, transparent 100%);
+      -webkit-mask-image: linear-gradient(to top, #000 0%, transparent 100%); }
+
+    /* —— UI 浮层 —— */
+    .ui { position: fixed; z-index: 10; color: #2a2218; }
+    body[data-tod="night"] .ui { color: #ece7f5; }
+    header.ui { top: 22px; left: 26px; }
+    header .title { font-size: 20px; font-weight: 700; letter-spacing: .5px;
+      display: flex; align-items: baseline; gap: 10px; }
+    header .badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+      background: rgba(0,0,0,.08); color: inherit; letter-spacing: .3px; }
+    body[data-tod="night"] header .badge { background: rgba(255,255,255,.14); }
+    header .sub { font-size: 12px; opacity: .68; margin-top: 4px; }
+
+    .legend { top: 22px; right: 26px; display: flex; flex-wrap: wrap; gap: 6px 12px;
+      max-width: 360px; justify-content: flex-end; font-size: 11.5px; opacity: .9; }
+    .legend .it { display: inline-flex; align-items: center; gap: 5px; }
+    .legend .dot { width: 9px; height: 9px; border-radius: 3px; box-shadow: 0 0 7px currentColor; }
+
+    .hint { bottom: 18px; left: 50%; transform: translateX(-50%); font-size: 12px; opacity: .6;
+      display: flex; gap: 16px; }
+    .hud { bottom: 16px; right: 22px; font-size: 11px; opacity: .6; text-align: right; line-height: 1.5; }
+
+    .controls { bottom: 16px; left: 22px; display: flex; gap: 8px; }
+    .controls button { font: inherit; font-size: 12px; padding: 6px 12px; border-radius: 999px; cursor: pointer;
+      border: 1px solid rgba(0,0,0,.14); background: rgba(255,255,255,.55); color: #2a2218; backdrop-filter: blur(6px); }
+    body[data-tod="night"] .controls button { border-color: rgba(255,255,255,.2); background: rgba(40,38,60,.5); color: #ece7f5; }
+    .controls button[aria-pressed="true"] { background: #e6a52e; color: #1a1407; border-color: transparent; }
+
+    #loading { position: fixed; inset: 0; display: grid; place-items: center; z-index: 20;
+      font-size: 14px; color: #6b5e48; background: inherit; }
+  </style>
+
+  <!-- 本地 vendoring 的 three.js（无 CDN 运行时依赖，VPN/DNS 环境也稳） -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "/static/vendor/three/three.module.js",
+      "three/addons/": "/static/vendor/three/addons/"
+    }
+  }
+  </script>
+</head>
+<body data-tod="day">
+  <div id="stage"><canvas id="scene"></canvas></div>
+
+  <!-- 后期调色 / 移轴层 -->
+  <div class="grade tone"></div>
+  <div class="grade warm"></div>
+  <div class="grade vignette"></div>
+  <div class="tilt top"></div>
+  <div class="tilt bottom"></div>
+
+  <header class="ui">
+    <div class="title">Claude Office <span class="badge">3D 微缩原型</span></div>
+    <div class="sub">真 3D · 正交 iso · 软阴影 · 移轴景深 · 暖色调 —— 读真实 /cc/rooms</div>
+  </header>
+
+  <div class="ui legend" id="legend"></div>
+
+  <div class="ui controls">
+    <button id="btnRotate" aria-pressed="false">自转</button>
+    <button id="btnReset">复位视角</button>
+  </div>
+
+  <div class="ui hint">
+    <span>🖱 拖拽旋转</span><span>滚轮缩放</span><span>右键平移</span>
+  </div>
+  <div class="ui hud" id="hud">连接中…</div>
+
+  <div id="loading">正在搭建微缩办公室…</div>
+
+  <script type="module" src="/static/office3d.js?v=proto1"></script>
+</body>
+</html>
