@@ -27,7 +27,7 @@ const stOf = (s) => STATE[s] || STATE.idle;
 
 // 房间部门配色池（楼层地板/墙裙的暖色低饱调）
 const ACCENTS = [0xe8a36b, 0x6fa8c7, 0x8bbf8f, 0xc78fb0, 0xd9b15e, 0x8e88c4, 0xcf8d72];
-const ROOM = 4.4;          // 每间办公室占地（世界单位）
+const ROOM = 6.2;          // 每间办公室占地（世界单位；容纳 主三联屏 + 4 子单屏，不挤）
 const GAP = 0.5;           // 房间间隔
 const WALL_H = 1.05;       // 矮墙（开放式娃娃屋视角）
 const POLL_MS = 2500;
@@ -380,29 +380,36 @@ function buildRoom(accent) {
   wx.position.set(-ROOM / 2 + 0.06, WALL_H / 2 + 0.16, 0); g.add(wx);
   const skirt = meshRB(ROOM, 0.1, 0.14, 0.02, mat(accent, { rough: 0.6 }));
   skirt.position.set(0, 0.5, -ROOM / 2 + 0.07); g.add(skirt);
-  // 工位：Kenney desk + chairDesk + 发光屏(我们的 screenMat, 驱动 Tokyo 霓虹)
+  // 工位：1 主(三联屏) + 4 子(单屏)；Kenney desk+chairDesk + 发光屏(screenMat 驱动 Tokyo 霓虹)
   const fs = MODELS._fs || 1, FY = 0.16;
   const seats = [];
-  // [x, z, ry] ry=朝向(贴左墙转 90° / 贴后墙不转)
-  const spots = [[-ROOM / 2 + 1.0, -0.6, Math.PI / 2], [-ROOM / 2 + 1.0, 0.8, Math.PI / 2],
-                 [0.4, -ROOM / 2 + 1.0, 0], [1.6, -ROOM / 2 + 1.0, 0]];
-  spots.forEach(([x, z, ry]) => {
+  // [x, z, ry, screens]  ry=朝向(贴左墙转90°/贴后墙不转)；stations[0]=主 Agent
+  const stations = [
+    [0, -ROOM / 2 + 1.1, 0, 3],                 // 主：后墙中央，三联屏
+    [-2.5, -ROOM / 2 + 1.1, 0, 1],              // 子：后墙左
+    [2.5, -ROOM / 2 + 1.1, 0, 1],               // 子：后墙右
+    [-ROOM / 2 + 1.1, 0.1, Math.PI / 2, 1],     // 子：左墙上
+    [-ROOM / 2 + 1.1, 2.0, Math.PI / 2, 1],     // 子：左墙下
+  ];
+  stations.forEach(([x, z, ry, screens]) => {
     if (MODELS.desk) {
       const desk = MODELS.desk.clone(); desk.scale.setScalar(fs); desk.position.set(x, FY, z); desk.rotation.y = ry; g.add(desk);
       const dh = (MODELS.desk.userData.size.y || 0.7) * fs;
-      const scr = meshRB(0.5, 0.34, 0.05, 0.02, screenMat);
-      scr.position.set(x, FY + dh + 0.2, z); scr.rotation.y = ry; g.add(scr);
+      for (let s = 0; s < screens; s++) {               // 三联屏沿桌宽方向排开
+        const off = (s - (screens - 1) / 2) * 0.56;
+        const scr = meshRB(0.48, 0.33, 0.05, 0.02, screenMat);
+        scr.position.set(x + (ry ? 0 : off), FY + dh + 0.2, z + (ry ? off : 0));
+        scr.rotation.y = ry; g.add(scr);
+      }
       if (MODELS.chairDesk) {
         const ch = MODELS.chairDesk.clone(); ch.scale.setScalar(fs); ch.rotation.y = ry + Math.PI;
-        ch.position.set(x + (ry ? 0.7 : 0), FY, z + (ry ? 0 : 0.7)); g.add(ch);
+        ch.position.set(x + (ry ? 0.78 : 0), FY, z + (ry ? 0 : 0.78)); g.add(ch);
       }
     } else {   // 回退：程序化桌
       const desk = meshRB(0.95, 0.5, 0.6, 0.06, mat(0xc99a6b, { rough: 0.65 }));
       desk.position.set(x, 0.41, z); desk.rotation.y = ry; g.add(desk);
-      const scr = meshRB(0.6, 0.42, 0.05, 0.02, screenMat);
-      scr.position.set(x, 0.82, z); scr.rotation.y = ry; g.add(scr);
     }
-    seats.push({ x: x + (ry ? 1.0 : 0), z: z + (ry ? 0 : 1.0) });
+    seats.push({ x: x + (ry ? 1.2 : 0), z: z + (ry ? 0 : 1.2) });
   });
   g.userData = { seats };
   return g;
@@ -448,7 +455,8 @@ function syncRooms(list) {
       group.position.set(p.x, 0, p.z);
       scene.add(group);
       const fig = makeFigure(true);
-      fig.position.set(0.3, 0.16, 0.3);
+      const bseat = shell.userData.seats[0] || { x: 0, z: 0 };   // 主 Agent 坐三联屏位
+      fig.position.set(bseat.x, 0.16, bseat.z);
       group.add(fig);
       rooms.set(r.sessionId, { group, fig, emps: [], monster: null, seats: shell.userData.seats, accent });
     });
@@ -458,10 +466,10 @@ function syncRooms(list) {
     const room = rooms.get(r.sessionId);
     if (!room) return;
     setFigState(room.fig, (r.boss && r.boss.state) || "idle");
-    const want = Math.min((r.employees || []).length, room.seats.length);
+    const want = Math.min((r.employees || []).length, room.seats.length - 1);   // 主位占 seats[0]
     while (room.emps.length < want) {
       const e = makeFigure(false);
-      const s = room.seats[room.emps.length];
+      const s = room.seats[room.emps.length + 1];
       e.position.set(s.x, 0.16, s.z);
       room.group.add(e); room.emps.push(e);
     }
