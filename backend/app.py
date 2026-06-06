@@ -2178,6 +2178,8 @@ def cc_push():
             room["updated_at"] = now
             if isinstance(data.get("ctxPct"), (int, float)):     # 上下文占用%(钩子算好)，驱动门口车流密度
                 room["ctxPct"] = max(0.0, min(100.0, float(data["ctxPct"])))
+            if "automode" in data:                               # automode(自动接受/绕过权限) → LED 黄灯
+                room["automode"] = bool(data.get("automode"))
 
             if op == "delegate":
                 room["boss"] = {"state": "delegating",
@@ -2246,6 +2248,7 @@ def cc_rooms():
                     "closing": bool(room.get("closing")),
                     "ctxPct": room.get("ctxPct"),
                     "monster": monster,          # 出错怪兽:错误后 CC_MONSTER_TTL 秒内为真
+                    "automode": bool(room.get("automode")),   # automode 启用 → LED 黄灯
                     "updated_at": room.get("updated_at"),
                 })
             if changed:

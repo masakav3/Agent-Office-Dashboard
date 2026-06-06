@@ -27,7 +27,7 @@ const stOf = (s) => STATE[s] || STATE.idle;
 
 // 房间部门配色池（楼层地板/墙裙的暖色低饱调）
 const ACCENTS = [0xe8a36b, 0x6fa8c7, 0x8bbf8f, 0xc78fb0, 0xd9b15e, 0x8e88c4, 0xcf8d72];
-const ROOM = 7.5;          // 每间办公室占地（世界单位；容纳 主三联屏 + 4 子单屏坐姿工位，宽松）
+const ROOM = 8.8;          // 每间办公室占地（世界单位；土字形 5 工位宽松不挤）
 const GAP = 0.5;           // 房间间隔
 const WALL_H = 1.05;       // 矮墙（开放式娃娃屋视角）
 const POLL_MS = 2500;
@@ -208,9 +208,9 @@ function applyWeather(sky, isDay, city, temp) {
   // 发光体：夜间霓虹冷光更亮、白天也给足亮度(此前偏暗)；Bloom 让它们真正晕开光晕
   screenMat.emissive.setHex(tod === "night" ? 0x7dcfff : 0x4fb6e8);
   screenMat.emissiveIntensity = (tod === "night" ? 2.8 : 1.6) * (GLOW > 0 ? GLOW : 1);
-  if (MODELS._scr) {                                  // 真显示器屏幕发霓虹冷光
-    MODELS._scr.emissive.setHex(tod === "night" ? 0x7dcfff : 0x3fa9e0);
-    MODELS._scr.emissiveIntensity = (tod === "night" ? 2.2 : 1.2) * (GLOW > 0 ? GLOW : 1);
+  if (MODELS._scr) {                                  // 显示器"屏幕本体"材质发光(开机感,合并在屏上,入 Bloom)
+    MODELS._scr.emissive.setHex(tod === "night" ? 0x7dcfff : 0x53c6ff);
+    MODELS._scr.emissiveIntensity = (tod === "night" ? 3.0 : 1.9) * (GLOW > 0 ? GLOW : 1);
   }
   amb.intensity = tod === "night" ? 0.5 : 0.2;        // 夜间抬环境底光，杜绝小人纯黑
   amb.color.setHex(tod === "night" ? 0x8ea0d8 : 0xffffff);
@@ -249,6 +249,7 @@ const SUNK = _wq.get("sun") != null ? parseFloat(_wq.get("sun")) : 1;   // 主�
 const EXP = parseFloat(_wq.get("exp")) || 0;                      // 曝光覆盖(0=用默认)
 const BLOOM = parseFloat(_wq.get("bloom")) || 0;                 // 辉光强度覆盖(0=按昼夜默认)
 const GLOW = parseFloat(_wq.get("glow")) || 0;                   // 屏幕发光强度倍数(0=默认)
+const LEDB = parseFloat(_wq.get("led")) || 0;                    // LED 灯带亮度(0=默认3.4,越大越霓虹)
 
 // ── 材质/几何工具 ─────────────────────────────────────────────────────
 const matCache = new Map();
@@ -397,11 +398,12 @@ const LED_COLOR = {
   waiting: 0xffa33d,      // 橙 = 待授权
   delegating: 0xbb9af7,   // 紫 = 派活(自定义)
   idle: 0x6b7280,         // 暗灰 = 待命
-  // automode 预留黄 0xffd23d（暂无信号）
+  automode: 0xffd23d,     // 黄 = automode 启用中
 };
 function setLed(m, state) {
   const c = new THREE.Color(LED_COLOR[state] || 0x9aa3b2);
-  m.color.setRGB(c.r * 1.8, c.g * 1.8, c.b * 1.8);   // HDR 提亮供 Bloom 晕开
+  const b = LEDB > 0 ? LEDB : 3.4;                    // 霓虹辉光亮度(HDR 入 Bloom；?led= 可调)
+  m.color.setRGB(c.r * b, c.g * b, c.b * b);
 }
 function buildRoom(accent) {
   const g = new THREE.Group();
@@ -425,25 +427,24 @@ function buildRoom(accent) {
   // 工位：土字形居中（主三联屏在最前 + 后面两列 4 子单屏），全员朝 -z(背对镜头/正对显示器)，不靠墙
   const fs = MODELS._fs || 1, FY = 0.16;
   const dh = (MODELS.desk && MODELS.desk.userData.size.y || 0.38) * fs;
-  const DESK_FWD = 1.05;    // 桌在人前方(-z)的距离
+  const DESK_FWD = 1.1;     // 桌在人前方(-z)的距离
   const seats = [];
-  // [x, z(人位), screens]
+  const COL = 2.1, ROW0 = -0.5, ROW1 = 1.6;   // 列间距 / 前后两排 z（拉大不挤）
+  // [x, z(人位), screens] —— 土字形：主在最前，后面两列各 2 子
   const stations = [
-    [0, -1.7, 3],       // 主：最前，三联屏
-    [-1.35, -0.15, 1],  // 子：左前
-    [1.35, -0.15, 1],   // 子：右前
-    [-1.35, 1.35, 1],   // 子：左后
-    [1.35, 1.35, 1],    // 子：右后
+    [0, -2.5, 3],          // 主：最前，三联屏
+    [-COL, ROW0, 1],       // 子：左前
+    [COL, ROW0, 1],        // 子：右前
+    [-COL, ROW1, 1],       // 子：左后
+    [COL, ROW1, 1],        // 子：右后
   ];
   stations.forEach(([x, z, screens]) => {
     if (MODELS.desk) {
       const desk = MODELS.desk.clone(); desk.scale.setScalar(fs); desk.position.set(x, FY, z - DESK_FWD); g.add(desk);
-      for (let s = 0; s < screens; s++) {              // 真显示器朝 +z(朝人) + 始终亮的发光屏面
-        const off = (s - (screens - 1) / 2) * 0.64;
+      for (let s = 0; s < screens; s++) {              // 真显示器朝 +z(朝人)；屏幕发光=显示器本体材质(见 applyWeather)
+        const off = (s - (screens - 1) / 2) * 0.66;
         const mon = MODELS.computerScreen.clone(); mon.scale.setScalar(fs * 1.15);
         mon.position.set(x + off, FY + dh, z - DESK_FWD - 0.05); g.add(mon);
-        const glow = new THREE.Mesh(new THREE.PlaneGeometry(0.58, 0.38), screenGlow);
-        glow.position.set(x + off, FY + dh + 0.3, z - DESK_FWD + 0.07); g.add(glow);
       }
       if (MODELS.chairDesk) {
         const ch = MODELS.chairDesk.clone(); ch.scale.setScalar(fs); ch.rotation.y = Math.PI; ch.position.set(x, FY, z); g.add(ch);
@@ -511,7 +512,7 @@ function syncRooms(list) {
     if (!room) return;
     const bossState = (r.boss && r.boss.state) || "idle";
     setFigState(room.fig, bossState);
-    if (room.ledMat) setLed(room.ledMat, bossState);                            // L 形 LED = 主 Agent 状态
+    if (room.ledMat) setLed(room.ledMat, r.automode ? "automode" : bossState);  // L形LED=主Agent状态(automode优先黄)
     const want = Math.min((r.employees || []).length, room.seats.length - 1);   // 主位占 seats[0]
     while (room.emps.length < want) {
       const e = makeFigure(false);

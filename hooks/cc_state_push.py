@@ -92,7 +92,10 @@ def build_op(data: dict) -> Optional[dict]:
         return None  # 无法归属到办公室，跳过
     event = (data.get("hook_event_name") or "").strip()
     tool_name = (data.get("tool_name") or "").strip()
-    base = {"sessionId": session_id, "room": base_label(data.get("cwd") or "")}
+    # automode：Claude Code 自动接受编辑 / 绕过权限模式 → 看板亮黄灯
+    pm = (data.get("permission_mode") or data.get("permissionMode") or "").strip()
+    base = {"sessionId": session_id, "room": base_label(data.get("cwd") or ""),
+            "automode": pm in ("acceptEdits", "bypassPermissions")}
 
     if event == "UserPromptSubmit":
         return {**base, "type": "state", "state": "thinking", "detail": "🧠 思考中…"}
