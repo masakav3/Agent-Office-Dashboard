@@ -101,7 +101,7 @@ function disposeFx() {
   weatherFx = null;
 }
 function makeFx(kind) {
-  const n = kind === "rain" ? 1500 : 750, R = 28, H = 24;
+  const n = (NUM > 0 ? NUM : (kind === "rain" ? 2200 : 1100)), R = 28, H = 24;
   const pos = new Float32Array(n * 3), spd = new Float32Array(n);
   for (let i = 0; i < n; i++) {
     pos[i * 3] = (Math.random() * 2 - 1) * R;
@@ -112,8 +112,9 @@ function makeFx(kind) {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
   const m = new THREE.PointsMaterial({ color: kind === "rain" ? 0xb4ccdb : 0xffffff,
-    size: kind === "rain" ? 0.1 : 0.17, transparent: true,
-    opacity: kind === "rain" ? 0.5 : 0.85, depthWrite: false });
+    size: PSIZE > 0 ? PSIZE : (kind === "rain" ? 2.6 : 5.0),
+    sizeAttenuation: false,                 // 正交相机下用屏幕像素尺寸，否则点被缩成亚像素看不见
+    transparent: true, opacity: kind === "rain" ? 0.6 : 0.92, depthWrite: false });
   const pts = new THREE.Points(geo, m); pts.renderOrder = 3; scene.add(pts);
   weatherFx = { kind, pts, spd, R, H, n };
 }
@@ -148,17 +149,18 @@ function applyWeather(sky, isDay, city, temp) {
   const c = SKY[key][tod];
   document.body.style.background = `radial-gradient(120% 120% at 50% 16%, ${c.bg[0]} 0%, ${c.bg[1]} 100%)`;
   document.body.dataset.tod = tod;
-  sun.color.setHex(c.sun[0]); sun.intensity = c.sun[1];
+  sun.color.setHex(c.sun[0]); sun.intensity = c.sun[1] * SUNK;
   sun.position.set(c.sun[2][0], c.sun[2][1], c.sun[2][2]);
   sun.shadow.radius = c.shadow;
   hemi.color.setHex(c.hemi[0]); hemi.groundColor.setHex(c.hemi[1]); hemi.intensity = c.hemi[2];
-  renderer.toneMappingExposure = c.exp;
+  renderer.toneMappingExposure = EXP > 0 ? EXP : c.exp;
   fill.intensity = tod === "night" ? 0.18 : 0.34;
   studio.material.opacity = (key === "clear" || key === "partly") ? (tod === "night" ? 0.12 : 0.2) : 0.07;
   // 线性雾按相机距离取 near/far，避免正交远距相机被指数雾整片抹白（永不吞没场景）
-  if (c.fog) {
+  const fogD = c.fog * FOGK;
+  if (fogD > 0) {
     const cd = camera.position.distanceTo(controls.target);
-    const t = Math.min(1, Math.max(0, (c.fog - 0.012) / 0.048));   // 0=轻雾 1=浓雾
+    const t = Math.min(1, Math.max(0, (fogD - 0.012) / 0.048));   // 0=轻雾 1=浓雾
     scene.fog = new THREE.Fog(new THREE.Color(c.bg[1]).getHex(), cd * (0.9 - 0.4 * t), cd * (2.3 - 0.8 * t));
   } else {
     scene.fog = null;
@@ -170,10 +172,17 @@ function applyWeather(sky, isDay, city, temp) {
   skyBadge.textContent = `${ic} ${city || ""}${temp != null ? " " + Math.round(temp) + "°" : ""} · ${tod === "night" ? "夜" : "日"}`;
 }
 
-// 调试：?sky=rain&tod=night 直接预览任意天气（不必等真实天气命中）
+// 调试参数（URL query，便于实时拨参对比）：
+//   sky=clear|partly|cloudy|fog|rain|storm|snow   tod=day|night
+//   n=粒子数   psize=粒子像素大小   fog=雾强度倍数(0=关)   sun=主光强度倍数   exp=曝光覆盖
 const _wq = new URLSearchParams(location.search);
 const SKY_OVERRIDE = _wq.get("sky");
-const TOD_OVERRIDE = _wq.get("tod");   // day / night
+const TOD_OVERRIDE = _wq.get("tod");                              // day / night
+const NUM = parseInt(_wq.get("n"), 10) || 0;                      // 粒子数量(0=用默认)
+const PSIZE = parseFloat(_wq.get("psize")) || 0;                  // 粒子像素大小(0=用默认)
+const FOGK = _wq.get("fog") != null ? parseFloat(_wq.get("fog")) : 1;   // 雾强度倍数(0=关)
+const SUNK = _wq.get("sun") != null ? parseFloat(_wq.get("sun")) : 1;   // 主光强度倍数
+const EXP = parseFloat(_wq.get("exp")) || 0;                      // 曝光覆盖(0=用默认)
 
 // ── 材质/几何工具 ─────────────────────────────────────────────────────
 const matCache = new Map();
