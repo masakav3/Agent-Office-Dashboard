@@ -127,8 +127,20 @@ function disposeFx() {
   scene.remove(weatherFx.pts); weatherFx.pts.geometry.dispose(); weatherFx.pts.material.dispose();
   weatherFx = null;
 }
+// ❄️ 雪花贴图：把 emoji 画到 canvas 当点精灵，雪片即花形（告别方块）
+let _flakeTex = null;
+function flakeTex() {
+  if (_flakeTex) return _flakeTex;
+  const cv = document.createElement("canvas"); cv.width = cv.height = 64;
+  const g = cv.getContext("2d");
+  g.font = "52px 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',serif";
+  g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillText("❄️", 32, 36);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
+  _flakeTex = t; return t;
+}
 function makeFx(kind) {
-  const n = (NUM > 0 ? NUM : (kind === "rain" ? 2200 : 1100)), R = 28, H = 24;
+  const n = (NUM > 0 ? NUM : (kind === "rain" ? 2200 : 100)), R = 28, H = 24;   // 雪默认 100 片
   const pos = new Float32Array(n * 3), spd = new Float32Array(n);
   for (let i = 0; i < n; i++) {
     pos[i * 3] = (Math.random() * 2 - 1) * R;
@@ -138,10 +150,15 @@ function makeFx(kind) {
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  const m = new THREE.PointsMaterial({ color: kind === "rain" ? 0xb4ccdb : 0xffffff,
-    size: PSIZE > 0 ? PSIZE : (kind === "rain" ? 2.6 : 5.0),
+  const m = new THREE.PointsMaterial({
+    size: PSIZE > 0 ? PSIZE : (kind === "rain" ? 2.6 : 16),    // 雪 ❄️ 放大到能看清花形(可 ?psize= 调)
     sizeAttenuation: false,                 // 正交相机下用屏幕像素尺寸，否则点被缩成亚像素看不见
-    transparent: true, opacity: kind === "rain" ? 0.6 : 0.92, depthWrite: false });
+    transparent: true, depthWrite: false });
+  if (kind === "snow") {                    // 雪：❄️ 贴图切出花形
+    m.map = flakeTex(); m.alphaTest = 0.1; m.color.setHex(0xffffff); m.opacity = 0.95;
+  } else {                                  // 雨：细小冷色点
+    m.color.setHex(0xb4ccdb); m.opacity = 0.6;
+  }
   const pts = new THREE.Points(geo, m); pts.renderOrder = 3; scene.add(pts);
   weatherFx = { kind, pts, spd, R, H, n };
 }
@@ -188,7 +205,7 @@ function applyWeather(sky, isDay, city, temp) {
   screenMat.emissive.setHex(tod === "night" ? 0x7dcfff : 0x4fb6e8);
   screenMat.emissiveIntensity = (tod === "night" ? 2.8 : 1.6) * (GLOW > 0 ? GLOW : 1);
   // 阈值调高：只让真正的发光体(屏幕/光盘 HDR>1)晕开，避免被照亮的墙地一起发光糊成一团
-  bloom.strength = BLOOM > 0 ? BLOOM : (tod === "night" ? 0.6 : 0.22);
+  bloom.strength = BLOOM > 0 ? BLOOM : (tod === "night" ? 0.5 : 0.22);
   bloom.radius = tod === "night" ? 0.5 : 0.4;
   bloom.threshold = tod === "night" ? 0.72 : 0.85;
   studio.material.opacity = (key === "clear" || key === "partly") ? (tod === "night" ? 0.12 : 0.2) : 0.07;
@@ -281,13 +298,13 @@ function makeFigure(boss) {
       mat(0xe8b54b, { rough: 0.4, metal: 0.6, emissive: 0xe8b54b, ei: 0.15 }));
     crown.position.y = 1.26; crown.castShadow = true; g.add(crown);
   }
-  // 脚下状态光盘（从 iso 一眼读状态）
-  const disc = new THREE.Mesh(new THREE.CircleGeometry(boss ? 0.62 : 0.5, 32),
-    new THREE.MeshBasicMaterial({ color: 0x9aa3b2, transparent: true, opacity: 0.6 }));
+  // 脚下身份光盘：主 Agent=荧光红 / 子代理=白（HDR + toneMapped:false，让 Bloom 晕成霓虹光圈）
+  const discMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.72, depthWrite: false, toneMapped: false });
+  discMat.color.setRGB(...(boss ? [2.6, 0.16, 0.4] : [1.7, 1.7, 2.0]));
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(boss ? 0.66 : 0.52, 40), discMat);
   disc.rotation.x = -Math.PI / 2; disc.position.y = 0.06; g.add(disc);
   g.scale.setScalar(scale);
-  g.userData = { disc, body, head, boss, phase: Math.random() * 6.28, state: "idle",
-    tcol: new THREE.Color(0x9aa3b2) };
+  g.userData = { disc, body, head, boss, phase: Math.random() * 6.28, state: "idle" };
   return g;
 }
 function makeMonster() {
@@ -356,9 +373,7 @@ function cellPos(i) {
 }
 
 function setFigState(fig, state) {
-  const c = stOf(state).c;
-  fig.userData.state = state;
-  fig.userData.tcol.setHex(c);
+  fig.userData.state = state;   // 状态只驱动体态律动；身份靠脚下光盘红/白区分
 }
 
 function hashStr(s) { let h = 0; for (let i = 0; i < (s || "").length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; }
@@ -419,9 +434,8 @@ let autoRotate = false;
 
 function animFig(fig, t) {
   const u = fig.userData;
-  // 状态光盘颜色平滑过渡 + 呼吸
-  u.disc.material.color.lerp(u.tcol, 0.08);
-  u.disc.material.opacity = 0.45 + 0.35 * (0.5 + 0.5 * Math.sin(t * 3 + u.phase));
+  // 身份光盘呼吸脉动（颜色固定：主红/子白）
+  u.disc.material.opacity = 0.5 + 0.32 * (0.5 + 0.5 * Math.sin(t * 3 + u.phase));
   // 头/身随状态律动
   const f = bobFreq(u.state);
   const amp = u.state === "error" ? 0.05 : 0.035;
@@ -498,12 +512,9 @@ setInterval(pollWeather, 300000);
 
 // ── UI 浮层 ───────────────────────────────────────────────────────────
 const legend = document.getElementById("legend");
-["thinking", "researching", "writing", "executing", "delegating", "waiting", "error", "idle"].forEach((s) => {
-  const el = document.createElement("span"); el.className = "it";
-  const hex = "#" + stOf(s).c.toString(16).padStart(6, "0");
-  el.innerHTML = `<span class="dot" style="background:${hex};color:${hex}"></span>${stOf(s).zh}`;
-  legend.appendChild(el);
-});
+legend.innerHTML =
+  '<span class="it"><span class="dot" style="background:#ff2d4f;color:#ff2d4f"></span>主 Agent</span>' +
+  '<span class="it"><span class="dot" style="background:#ffffff;color:#ffffff"></span>子代理</span>';
 const btnRotate = document.getElementById("btnRotate");
 btnRotate.addEventListener("click", () => {
   autoRotate = !autoRotate; btnRotate.setAttribute("aria-pressed", String(autoRotate));
