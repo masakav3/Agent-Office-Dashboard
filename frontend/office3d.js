@@ -72,6 +72,109 @@ const fill = new THREE.DirectionalLight(0xbcd0ff, 0.35);  // 冷补光（天光�
 fill.position.set(-16, 14, -10);
 scene.add(fill);
 
+// ── 天气驱动光照 + 天空 + 雨雪粒子（呼应 2D 版"窗外天气"彩蛋）────────────
+// 配色复用 2D office.js 的 SKY_GRAD，让 3D 与 2D 视觉一致。
+// 每种 sky × 昼夜：bg=天空渐变, sun=[色,强度,[x,y,z]], hemi=[天色,地色,强度],
+//                  exp=曝光, shadow=阴影柔度, fog=雾密度, fx=粒子, flash=雷暴闪
+const SKY = {
+  clear:  { day:{ bg:["#bfe3f5","#eef5ec"], sun:[0xfff1da,2.3,[20,36,12]], hemi:[0xcfeaff,0x6b5a44,0.5],  exp:1.07, shadow:4.5, fog:0 },
+            night:{ bg:["#0e1220","#232b3e"], sun:[0xaab8ff,0.5,[-14,30,-8]], hemi:[0x29344f,0x12100d,0.22], exp:0.9,  shadow:8,  fog:0 } },
+  partly: { day:{ bg:["#bcd8e8","#e7efe9"], sun:[0xfff0d8,1.9,[18,34,12]], hemi:[0xc8e0ee,0x6b5a44,0.6],  exp:1.05, shadow:5.5, fog:0 },
+            night:{ bg:["#121829","#2c3550"], sun:[0x9fb0ff,0.45,[-12,28,-6]], hemi:[0x2a3550,0x14110e,0.25], exp:0.9,  shadow:8,  fog:0 } },
+  cloudy: { day:{ bg:["#9aaab8","#d2dae0"], sun:[0xf2f3f5,1.05,[10,38,8]], hemi:[0xccd5dc,0x70655a,0.95], exp:1.0,  shadow:13, fog:0.012 },
+            night:{ bg:["#1b2236","#3a4254"], sun:[0x9aa6c4,0.3,[-8,30,-4]],  hemi:[0x36405a,0x16140f,0.32], exp:0.88, shadow:14, fog:0.014 } },
+  fog:    { day:{ bg:["#c4c9cd","#e6e9ea"], sun:[0xeceef0,0.7,[8,40,6]],   hemi:[0xd6dadd,0x8a8378,1.05], exp:0.98, shadow:18, fog:0.05 },
+            night:{ bg:["#23262e","#444a54"], sun:[0x9aa0ac,0.22,[-6,32,-2]], hemi:[0x3a3f49,0x18160f,0.34], exp:0.86, shadow:18, fog:0.06 } },
+  rain:   { day:{ bg:["#6f7a86","#aab4be"], sun:[0xc9d2da,0.7,[8,34,8]],   hemi:[0xaab6c0,0x5a5448,0.9],  exp:0.96, shadow:16, fog:0.02,  fx:"rain" },
+            night:{ bg:["#1a2230","#39424f"], sun:[0x8a96b0,0.26,[-6,28,-4]], hemi:[0x303a4a,0x14120e,0.32], exp:0.85, shadow:16, fog:0.024, fx:"rain" } },
+  storm:  { day:{ bg:["#565d68","#8a929c"], sun:[0xb9c2cc,0.55,[6,32,6]],  hemi:[0x9aa4ae,0x4e4840,0.85], exp:0.93, shadow:17, fog:0.028, fx:"rain", flash:true },
+            night:{ bg:["#13171f","#2c333f"], sun:[0x7d88a0,0.22,[-5,26,-3]], hemi:[0x2a323e,0x12100d,0.3],  exp:0.82, shadow:17, fog:0.03,  fx:"rain", flash:true } },
+  snow:   { day:{ bg:["#aebcca","#e8eef4"], sun:[0xeaf0f6,1.0,[12,36,10]], hemi:[0xd2dde8,0x7a756a,0.95], exp:1.02, shadow:13, fog:0.018, fx:"snow" },
+            night:{ bg:["#222a3c","#444c60"], sun:[0x9fb0ff,0.34,[-8,30,-5]], hemi:[0x36405a,0x16140f,0.34], exp:0.9,  shadow:14, fog:0.02,  fx:"snow" } },
+};
+
+// 雨雪粒子（THREE.Points，世界空间罩住整栋楼）
+let weatherFx = null;
+function disposeFx() {
+  if (!weatherFx) return;
+  scene.remove(weatherFx.pts); weatherFx.pts.geometry.dispose(); weatherFx.pts.material.dispose();
+  weatherFx = null;
+}
+function makeFx(kind) {
+  const n = kind === "rain" ? 1500 : 750, R = 28, H = 24;
+  const pos = new Float32Array(n * 3), spd = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    pos[i * 3] = (Math.random() * 2 - 1) * R;
+    pos[i * 3 + 1] = Math.random() * H;
+    pos[i * 3 + 2] = (Math.random() * 2 - 1) * R;
+    spd[i] = kind === "rain" ? 22 + Math.random() * 14 : 2.0 + Math.random() * 1.8;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  const m = new THREE.PointsMaterial({ color: kind === "rain" ? 0xb4ccdb : 0xffffff,
+    size: kind === "rain" ? 0.1 : 0.17, transparent: true,
+    opacity: kind === "rain" ? 0.5 : 0.85, depthWrite: false });
+  const pts = new THREE.Points(geo, m); pts.renderOrder = 3; scene.add(pts);
+  weatherFx = { kind, pts, spd, R, H, n };
+}
+function stepWeather(dt, t) {
+  if (!weatherFx) return;
+  const { kind, pts, spd, R, H, n } = weatherFx;
+  const p = pts.geometry.attributes.position.array;
+  for (let i = 0; i < n; i++) {
+    p[i * 3 + 1] -= spd[i] * dt;
+    p[i * 3] += kind === "snow" ? Math.sin(t * 1.4 + i) * dt * 0.5 : dt * 3.4;   // 雪飘 / 雨斜
+    if (p[i * 3 + 1] < 0.1) {
+      p[i * 3 + 1] = H; p[i * 3] = (Math.random() * 2 - 1) * R; p[i * 3 + 2] = (Math.random() * 2 - 1) * R;
+    }
+  }
+  pts.geometry.attributes.position.needsUpdate = true;
+}
+
+// 雷暴闪电（全屏白光脉冲）+ 天气徽标
+const flashEl = document.createElement("div");
+flashEl.style.cssText = "position:fixed;inset:0;background:#eaf2ff;opacity:0;pointer-events:none;z-index:7;transition:opacity .12s";
+document.body.appendChild(flashEl);
+let stormFlash = false, flashCd = 3, flashDecay = 0;
+const skyBadge = document.createElement("div");
+skyBadge.className = "ui";
+skyBadge.style.cssText = "top:64px;left:26px;font-size:13px;font-weight:600;opacity:.82";
+document.body.appendChild(skyBadge);
+
+let curSky = "", curTod = "";
+function applyWeather(sky, isDay, city, temp) {
+  const key = SKY[sky] ? sky : "clear";
+  const tod = isDay === false ? "night" : "day";
+  const c = SKY[key][tod];
+  document.body.style.background = `radial-gradient(120% 120% at 50% 16%, ${c.bg[0]} 0%, ${c.bg[1]} 100%)`;
+  document.body.dataset.tod = tod;
+  sun.color.setHex(c.sun[0]); sun.intensity = c.sun[1];
+  sun.position.set(c.sun[2][0], c.sun[2][1], c.sun[2][2]);
+  sun.shadow.radius = c.shadow;
+  hemi.color.setHex(c.hemi[0]); hemi.groundColor.setHex(c.hemi[1]); hemi.intensity = c.hemi[2];
+  renderer.toneMappingExposure = c.exp;
+  fill.intensity = tod === "night" ? 0.18 : 0.34;
+  studio.material.opacity = (key === "clear" || key === "partly") ? (tod === "night" ? 0.12 : 0.2) : 0.07;
+  // 线性雾按相机距离取 near/far，避免正交远距相机被指数雾整片抹白（永不吞没场景）
+  if (c.fog) {
+    const cd = camera.position.distanceTo(controls.target);
+    const t = Math.min(1, Math.max(0, (c.fog - 0.012) / 0.048));   // 0=轻雾 1=浓雾
+    scene.fog = new THREE.Fog(new THREE.Color(c.bg[1]).getHex(), cd * (0.9 - 0.4 * t), cd * (2.3 - 0.8 * t));
+  } else {
+    scene.fog = null;
+  }
+  if (curSky !== key || curTod !== tod) { disposeFx(); if (c.fx) makeFx(c.fx); }
+  curSky = key; curTod = tod;
+  stormFlash = !!c.flash; if (!stormFlash) flashEl.style.opacity = "0";
+  const ic = { clear: "☀️", partly: "⛅", cloudy: "☁️", fog: "🌫️", rain: "🌧️", storm: "⛈️", snow: "❄️" }[key] || "☀️";
+  skyBadge.textContent = `${ic} ${city || ""}${temp != null ? " " + Math.round(temp) + "°" : ""} · ${tod === "night" ? "夜" : "日"}`;
+}
+
+// 调试：?sky=rain&tod=night 直接预览任意天气（不必等真实天气命中）
+const _wq = new URLSearchParams(location.search);
+const SKY_OVERRIDE = _wq.get("sky");
+const TOD_OVERRIDE = _wq.get("tod");   // day / night
+
 // ── 材质/几何工具 ─────────────────────────────────────────────────────
 const matCache = new Map();
 function mat(color, { rough = 0.85, metal = 0.0, emissive = 0x000000, ei = 0 } = {}) {
@@ -282,8 +385,10 @@ function animFig(fig, t) {
   fig.rotation.x = lean * (0.6 + 0.4 * Math.sin(t * f + u.phase));
 }
 
+let lastT = 0;
 function loop() {
   const t = clock.getElapsedTime();
+  const dt = Math.min(0.05, t - lastT); lastT = t;
   for (const [, r] of rooms) {
     animFig(r.fig, t);
     r.emps.forEach((e) => animFig(e, t));
@@ -292,6 +397,12 @@ function loop() {
       r.monster.userData.body.position.y = 0.7 + Math.abs(Math.sin(t * 5)) * 0.12;
     }
   }
+  stepWeather(dt, t);                                   // 雨雪下落
+  if (stormFlash) {                                     // 雷暴闪电
+    flashCd -= dt;
+    if (flashCd <= 0) { flashEl.style.opacity = "0.5"; flashDecay = 0.16; flashCd = 3 + Math.random() * 7; }
+  }
+  if (flashDecay > 0) { flashDecay -= dt; if (flashDecay <= 0) flashEl.style.opacity = "0"; }
   controls.autoRotate = autoRotate;
   controls.autoRotateSpeed = 0.6;
   controls.update();
@@ -325,13 +436,12 @@ async function pollRooms() {
 async function pollWeather() {
   try {
     const w = await (await fetch("/cc/weather", { cache: "no-store" })).json();
-    const night = w && w.isDay === false;
-    document.body.dataset.tod = night ? "night" : "day";
-    sun.intensity = night ? 0.5 : 2.0;
-    hemi.intensity = night ? 0.28 : 0.55;
-    sun.color.setHex(night ? 0x9fb0ff : 0xfff0d8);
-    renderer.toneMappingExposure = night ? 0.92 : 1.04;
-  } catch (e) {}
+    const sky = SKY_OVERRIDE || (w && w.sky) || "clear";
+    const isDay = TOD_OVERRIDE ? TOD_OVERRIDE !== "night" : (w ? w.isDay : true);
+    applyWeather(sky, isDay, w && w.city, w && w.temp);
+  } catch (e) {
+    if (SKY_OVERRIDE) applyWeather(SKY_OVERRIDE, TOD_OVERRIDE !== "night", "", null);  // 后端没起也能预览
+  }
 }
 pollRooms(); pollWeather();
 setInterval(pollRooms, POLL_MS);
