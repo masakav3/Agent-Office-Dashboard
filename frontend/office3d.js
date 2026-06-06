@@ -316,13 +316,9 @@ function grassTuft(col) {
   }
   return g;
 }
-function flowerProp() {
-  const g = new THREE.Group();
-  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.16, 4), mat(0x4f9a52, { rough: 1 }));
-  stem.position.y = 0.08; g.add(stem);
-  const c = [0xff6b9d, 0xffd23d, 0xffffff, 0xb47cff, 0xff8e5e][Math.floor(Math.random() * 5)];
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), mat(c, { rough: .8 }));
-  head.position.y = 0.18; g.add(head); return g;
+function flowerProp() {       // 🌷🌸🌼🌺🌻🌹 emoji 立牌(随机)
+  const e = ["🌷", "🌸", "🌼", "🌺", "🌻", "🌹"][Math.floor(Math.random() * 6)];
+  return emojiBillboard(e, 0.62 + Math.random() * 0.22);
 }
 function snowPatch() {
   const m = new THREE.Mesh(new THREE.CircleGeometry(0.3 + Math.random() * 0.35, 14), mat(0xeef4ff, { rough: .95 }));
@@ -362,29 +358,41 @@ function decorateBaseSeason(slab, w, d) {
     else obj = grassTuft(SUM[i % 3]);                                                         // 夏:草丛
     obj.position.set(x, 0, z); grp.add(obj);
   }
-  if (SEASON === "winter") { const sm = snowmanProp(); sm.position.set(hw + 0.3, 0, hd + 0.3); grp.add(sm); }
+  if (SEASON === "winter") { const sm = emojiBillboard("⛄", 1.2); sm.position.set(hw + 0.3, 0, hd + 0.3); grp.add(sm); }
+  if (SEASON === "autumn") {                    // 角落堆一堆枯叶(土堆 + 🍁 簇拥)
+    const pile = new THREE.Group(); pile.position.set(hw + 0.2, 0, hd + 0.2);
+    const mound = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), mat(0x9a6630, { rough: 1 }));
+    mound.scale.y = 0.5; pile.add(mound);
+    for (let i = 0; i < 16; i++) {
+      const lf = emojiBillboard("🍁", 0.42, 0.08 + Math.random() * 0.4);
+      lf.position.set((Math.random() - .5) * 1.0, 0, (Math.random() - .5) * 1.0); pile.add(lf);
+    }
+    grp.add(pile);
+  }
   slab.add(grp);
 }
 
 // 飞舞元素：春蝴蝶 / 夏绿叶 / 秋枫叶飘落
 let seasonFlyers = [];
-function butterflyMesh() {
-  const g = new THREE.Group();
-  const c = [0xff7eb6, 0xffd23d, 0x7ec8ff, 0xff9e64][Math.floor(Math.random() * 4)];
-  const wm = new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide, toneMapped: false });
-  const L = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.26), wm); L.position.x = -0.1;
-  const R = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.26), wm); R.position.x = 0.1;
-  g.add(L, R); g.userData = { L, R }; return g;
+function butterflyMesh() {     // 🦋 emoji 立牌(朝镜头)
+  return emojiBillboard("🦋", 0.85, 0);
 }
 const _leafTex = {};
-function leafTex(emoji) {     // emoji → canvas 贴图(缓存)，给叶子/枫叶切出真实叶形
+function leafTex(emoji) {     // emoji → canvas 贴图(缓存)，切出真实形状(叶/花/蝴蝶/雪人)
   if (_leafTex[emoji]) return _leafTex[emoji];
-  const cv = document.createElement("canvas"); cv.width = cv.height = 64;
+  const cv = document.createElement("canvas"); cv.width = cv.height = 128;
   const g = cv.getContext("2d");
-  g.font = "52px 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',serif";
-  g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(emoji, 32, 36);
+  g.font = "104px 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',serif";
+  g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(emoji, 64, 72);
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
   _leafTex[emoji] = t; return t;
+}
+// emoji 立牌(Sprite 永远朝镜头)：花/雪人/蝴蝶等小物，比程序化造型自然
+function emojiBillboard(emoji, size, yBase) {
+  const g = new THREE.Group();
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: leafTex(emoji), transparent: true, depthWrite: false }));
+  s.scale.set(size, size, 1); s.position.y = (yBase != null ? yBase : size * 0.5);
+  g.add(s); g.userData.spr = s; return g;
 }
 function flyLeaf(autumn) {     // 🍃绿叶 / 🍁枫叶 贴图(告别方块)
   return new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34),
@@ -407,13 +415,12 @@ function makeFlyers() {
 function stepFlyers(dt, t) {
   for (const f of seasonFlyers) {
     const p = f.mesh.position;
-    if (f.kind === "butterfly") {                       // 蝴蝶:绕飞+起伏+扇翅
+    if (f.kind === "butterfly") {                       // 蝴蝶:绕飞+起伏+横向缩放仿扇翅
       p.x += Math.cos(t * f.sp + f.ph) * dt * 1.4;
       p.z += Math.sin(t * f.sp * 1.3 + f.ph) * dt * 1.4;
       p.y = 1.6 + Math.sin(t * 2 + f.ph) * 0.6;
-      f.mesh.rotation.y = t * f.sp + f.ph;
-      const flap = 0.5 + 0.7 * Math.abs(Math.sin(t * 11 + f.ph));
-      f.mesh.userData.L.rotation.y = flap; f.mesh.userData.R.rotation.y = -flap;
+      const spr = f.mesh.userData.spr;
+      if (spr) spr.scale.x = 0.85 * (0.5 + 0.5 * Math.abs(Math.sin(t * 12 + f.ph)));
     } else {                                            // 叶子:飘落+翻转,落地回到高空
       p.y -= dt * (0.5 + f.sp); p.x += Math.sin(t + f.ph) * dt * 0.7;
       f.mesh.rotation.x += dt * 2.2; f.mesh.rotation.z += dt * 1.4;
