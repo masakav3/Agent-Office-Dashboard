@@ -127,13 +127,14 @@ def _require_asset_editor_auth():
 @app.after_request
 def add_no_cache_headers(response):
     """Apply cache policy by path:
-    - HTML/API/state: no-cache (always fresh)
-    - /static assets (2xx only): long cache (filenames are versioned with ?v=VERSION_TIMESTAMP)
-    - /static assets (non-2xx, e.g. 404): no-cache to prevent CDN from caching errors
+    - HTML/API/state: no-store (always fresh)
+    - /static assets (2xx only): no-cache —— 浏览器仍缓存，但每次用 ETag/Last-Modified 复查；
+      没变回 304(秒回)，变了自动拿新的。改素材/JS 后普通刷新即可生效，无需强刷。
+    - /static assets (non-2xx, e.g. 404): no-cache to prevent caching errors
     """
     path = (request.path or "")
     if path.startswith('/static/') and 200 <= response.status_code < 300:
-        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        response.headers["Cache-Control"] = "no-cache"      # 复查式缓存：变了即更新，不用强刷
         response.headers.pop("Pragma", None)
         response.headers.pop("Expires", None)
     else:
@@ -2063,6 +2064,343 @@ def assets_upload():
         return jsonify({"ok": True, "path": rel_path, "size": st.st_size, "backup": backup})
     except Exception as e:
         return jsonify({"ok": False, "msg": str(e)}), 500
+
+
+# ============================================================================
+# Claude Code 多办公室视图（Phase 2）
+# 每个 Claude Code 会话 = 一间办公室(room)；主循环 = 头儿(boss)；subagent = 员工。
+# 与上游单办公室(/status /agents)完全解耦，独立存储 cc-rooms.json。
+# AIGC CLAUDE-OPUS-4-8 2026-06-04
+# ============================================================================
+CC_ROOMS_FILE = os.path.join(ROOT_DIR, "cc-rooms.json")
+cc_lock = threading.Lock()
+CC_EMPLOYEE_TTL = int(os.getenv("CC_EMPLOYEE_TTL", "300"))    # 员工无更新 5min 视为离场
+CC_ROOM_TTL = int(os.getenv("CC_ROOM_TTL", "7200"))          # 兜底上限
+CC_IDLE_TTL = int(os.getenv("CC_IDLE_TTL", "150"))           # 忙但久未更新 → 自动 idle(防僵尸卡工作态)
+CC_DEAD_TTL = int(os.getenv("CC_DEAD_TTL", "1800"))          # 久无活动 → 判定会话已死 → 关闭办公室(崩溃/强杀兜底)
+CC_CLOSE_GRACE = int(os.getenv("CC_CLOSE_GRACE", "8"))       # 进入关闭后宽限(秒)，给前端走"下班离场"动画
+CC_BUSY = frozenset({"thinking", "researching", "writing", "executing", "delegating", "waiting"})
+CC_MONSTER_TTL = int(os.getenv("CC_MONSTER_TTL", "25"))      # 出错后怪兽在办公室停留(秒)
+CC_VALID_STATES = frozenset({
+    "idle", "thinking", "researching", "writing", "executing",
+    "delegating", "waiting", "error", "sleeping",
+})
+
+
+def _cc_now() -> str:
+    return datetime.now().isoformat()
+
+
+def _cc_load() -> dict:
+    if os.path.exists(CC_ROOMS_FILE):
+        try:
+            with open(CC_ROOMS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict) and isinstance(data.get("rooms"), dict):
+                return data
+        except Exception:
+            pass
+    return {"rooms": {}}
+
+
+def _cc_save(data: dict) -> None:
+    fd, tmp = tempfile.mkstemp(dir=ROOT_DIR, suffix=".cc.tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, CC_ROOMS_FILE)
+    except Exception:
+        try:
+            os.remove(tmp)
+        except Exception:
+            pass
+
+
+def _cc_norm_state(s) -> str:
+    s = (s or "").lower().strip()
+    return s if s in CC_VALID_STATES else "executing"
+
+
+def _cc_get_room(store: dict, session_id: str, label: str) -> dict:
+    room = store["rooms"].get(session_id)
+    now = _cc_now()
+    if room is None:
+        room = {
+            "label": label or session_id[:8],
+            "boss": {"state": "idle", "detail": "", "updated_at": now},
+            "employees": [],
+            "emp_counter": 0,
+            "updated_at": now,
+        }
+        store["rooms"][session_id] = room
+    if label:
+        room["label"] = label
+    return room
+
+
+@app.route("/cc/push", methods=["POST"])
+def cc_push():
+    """Claude Code 钩子转发器调用，维护"会话=办公室"的状态。
+
+    body: {type, sessionId, room?, state?, detail?, name?}
+      type=state         设置头儿状态
+      type=delegate      头儿置为 delegating，并新增一个员工(name=子代理类型)
+      type=subagent_done 移除一个最早在岗的员工(FIFO 近似)
+      type=session_end   关闭该办公室
+    钩子侧已做静默，这里出错也只返回 ok=false，不抛硬错。
+    """
+    try:
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"ok": False, "msg": "invalid json"}), 400
+        op = (data.get("type") or "state").strip()
+        session_id = (data.get("sessionId") or "").strip()
+        if not session_id:
+            return jsonify({"ok": False, "msg": "missing sessionId"}), 400
+        label = (data.get("room") or "").strip()
+        detail = (data.get("detail") or "").strip()
+
+        with cc_lock:
+            store = _cc_load()
+            if op == "session_end":
+                room = store["rooms"].get(session_id)
+                if room:                                      # 不立即 pop：标记关闭，让前端走"下班离场"动画
+                    room["closing"] = True
+                    room["closingAt"] = _cc_now()
+                    if isinstance(room.get("boss"), dict):
+                        room["boss"]["state"] = "idle"
+                        room["boss"]["detail"] = "🚪 会话结束，收工"
+                    _cc_save(store)
+                return jsonify({"ok": True})
+
+            room = _cc_get_room(store, session_id, label)
+            now = _cc_now()
+            room["updated_at"] = now
+            if isinstance(data.get("ctxPct"), (int, float)):     # 上下文占用%(钩子算好)，驱动门口车流密度
+                room["ctxPct"] = max(0.0, min(100.0, float(data["ctxPct"])))
+
+            if op == "delegate":
+                room["boss"] = {"state": "delegating",
+                                "detail": detail or "👥 指挥子代理…", "updated_at": now}
+                room["emp_counter"] = room.get("emp_counter", 0) + 1
+                room["employees"].append({
+                    "empId": f"e{room['emp_counter']}",
+                    "name": (data.get("name") or "子代理").strip()[:24],
+                    "state": "working",
+                    "detail": "",
+                    "updated_at": now,
+                })
+            elif op == "subagent_done":
+                if room["employees"]:
+                    room["employees"].pop(0)
+            else:  # op == "state"
+                st = _cc_norm_state(data.get("state"))
+                room["boss"] = {"state": st, "detail": detail, "updated_at": now}
+                if st == "error":
+                    room["monsterAt"] = now      # 出错→该办公室刷怪兽(前端按 CC_MONSTER_TTL 维持)
+            _cc_save(store)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)}), 500
+
+
+@app.route("/cc/rooms", methods=["GET"])
+def cc_rooms():
+    """返回当前活跃办公室；按 TTL 过滤过期员工与办公室。"""
+    try:
+        now = datetime.now()
+        with cc_lock:
+            store = _cc_load()
+            changed = False
+            out = []
+            def _age(ts):
+                try:
+                    return (now - datetime.fromisoformat(ts)).total_seconds()
+                except Exception:
+                    return 0
+            for sid, room in list(store["rooms"].items()):
+                # 久无活动 → 判定会话已死 → 标记关闭(崩溃/强杀兜底)
+                if not room.get("closing") and _age(room.get("updated_at")) > CC_DEAD_TTL:
+                    room["closing"] = True; room["closingAt"] = _cc_now(); changed = True
+                # 关闭宽限到期 → 真正移除
+                if room.get("closing") and _age(room.get("closingAt") or room.get("updated_at")) > CC_CLOSE_GRACE:
+                    store["rooms"].pop(sid, None); changed = True; continue
+                boss = dict(room.get("boss") or {})
+                # 自动 idle 防僵尸：忙 + 久未更新 → 当作 idle(头儿去茶水间)
+                if not room.get("closing") and boss.get("state") in CC_BUSY and _age(boss.get("updated_at")) > CC_IDLE_TTL:
+                    boss["state"] = "idle"
+                emps = []
+                for e in room.get("employees", []):
+                    if _age(e.get("updated_at")) <= CC_EMPLOYEE_TTL:
+                        emps.append(e)
+                    else:
+                        changed = True
+                if len(emps) != len(room.get("employees", [])):
+                    room["employees"] = emps
+                monster = bool(room.get("monsterAt")) and _age(room.get("monsterAt")) < CC_MONSTER_TTL and not room.get("closing")
+                out.append({
+                    "sessionId": sid,
+                    "label": room.get("label"),
+                    "boss": boss,
+                    "employees": emps,
+                    "closing": bool(room.get("closing")),
+                    "ctxPct": room.get("ctxPct"),
+                    "monster": monster,          # 出错怪兽:错误后 CC_MONSTER_TTL 秒内为真
+                    "updated_at": room.get("updated_at"),
+                })
+            if changed:
+                _cc_save(store)
+        out.sort(key=lambda r: r.get("updated_at") or "", reverse=True)
+        # 全楼车流负载 = 在岗(非关闭)办公室里最高的上下文占用%；无数据则 0
+        load = max([r["ctxPct"] for r in out if not r["closing"] and isinstance(r.get("ctxPct"), (int, float))] or [0])
+        with _net_lock:
+            net = dict(_net_status)              # 监控网址连通(DGX 机房红绿灯)
+        return jsonify({"rooms": out, "load": load, "net": net})
+    except Exception as e:
+        return jsonify({"rooms": [], "msg": str(e)}), 500
+
+
+@app.route("/office", methods=["GET"])
+def office_page():
+    """Claude Code 多办公室看板（Phase 2）。"""
+    with open(os.path.join(FRONTEND_DIR, "office.html"), "r", encoding="utf-8") as f:
+        html = f.read()
+    html = html.replace("{{VERSION_TIMESTAMP}}", VERSION_TIMESTAMP)
+    resp = make_response(html)
+    resp.headers["Content-Type"] = "text/html; charset=utf-8"
+    return resp
+
+
+# ============================================================================
+# 窗外天气联动：IP 定位 + Open-Meteo 当前天气(含昼夜)，内存缓存 10 分钟
+# AIGC CLAUDE-OPUS-4-8 2026-06-05
+# ============================================================================
+import urllib.request as _urlreq
+
+_weather_cache = {"data": None, "at": None}
+WEATHER_TTL = 600
+WEATHER_DEFAULT = {"sky": "clear", "isDay": True, "temp": None, "code": 0, "city": "Office"}
+
+
+def _wmo_to_sky(code):
+    try:
+        code = int(code)
+    except Exception:
+        return "clear"
+    if code == 0:
+        return "clear"
+    if code in (1, 2):
+        return "partly"
+    if code == 3:
+        return "cloudy"
+    if code in (45, 48):
+        return "fog"
+    if code in (71, 73, 75, 77, 85, 86):
+        return "snow"
+    if code in (95, 96, 99):
+        return "storm"
+    if code in (51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82):
+        return "rain"
+    return "clear"
+
+
+def _http_json(url, timeout):
+    req = _urlreq.Request(url, headers={"User-Agent": "claude-office/1.0"})
+    with _urlreq.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def _fetch_weather():
+    lat, lon, city = 39.90, 116.40, "Office"     # 兜底：北京
+    for u in ("http://ip-api.com/json/?fields=lat,lon,city",
+              "https://ipapi.co/json/"):
+        try:
+            g = _http_json(u, 3)
+            la = g.get("lat") if g.get("lat") is not None else g.get("latitude")
+            lo = g.get("lon") if g.get("lon") is not None else g.get("longitude")
+            if la is not None and lo is not None:
+                lat, lon, city = la, lo, (g.get("city") or city)
+                break
+        except Exception:
+            continue
+    out = dict(WEATHER_DEFAULT, city=city)
+    try:
+        d = _http_json(
+            f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
+            f"&current=weather_code,is_day,temperature_2m", 4).get("current", {})
+        out["code"] = d.get("weather_code", 0)
+        out["isDay"] = bool(d.get("is_day", 1))
+        out["temp"] = d.get("temperature_2m")
+        out["sky"] = _wmo_to_sky(out["code"])
+    except Exception:
+        pass
+    return out
+
+
+@app.route("/cc/weather", methods=["GET"])
+def cc_weather():
+    try:
+        now = datetime.now()
+        stale = (_weather_cache["at"] is None or
+                 (now - _weather_cache["at"]).total_seconds() > WEATHER_TTL)
+        if stale:
+            _weather_cache["data"] = _fetch_weather()
+            _weather_cache["at"] = now
+        return jsonify(_weather_cache["data"] or WEATHER_DEFAULT)
+    except Exception as e:
+        return jsonify(dict(WEATHER_DEFAULT, msg=str(e)))
+
+
+# ============================================================================
+# 网址连通监控（DGX 机房红绿灯）：后台线程每 NET_CHECK_INTERVAL 秒探一次，cc_rooms 直接读缓存
+# AIGC CLAUDE-OPUS-4-8 2026-06-05
+# ============================================================================
+CC_MONITOR_URL = os.getenv("CC_MONITOR_URL", "https://www.google.com")
+NET_CHECK_INTERVAL = int(os.getenv("CC_NET_INTERVAL", "30"))
+_net_lock = threading.Lock()
+_net_status = {"url": CC_MONITOR_URL, "ok": None, "code": None, "at": None}
+
+
+def _net_probe(url):
+    """HEAD 探测,失败退回 GET;返回 (ok, status_code)。"""
+    for method in ("HEAD", "GET"):
+        try:
+            req = _urlreq.Request(url, method=method,
+                                  headers={"User-Agent": "claude-office-netcheck/1.0"})
+            with _urlreq.urlopen(req, timeout=5) as r:
+                return True, getattr(r, "status", 200)
+        except Exception:
+            continue
+    return False, None
+
+
+def _net_loop():
+    import time as _time
+    while True:
+        with _net_lock:
+            url = _net_status["url"]
+        ok, code = _net_probe(url)
+        with _net_lock:
+            _net_status.update(ok=ok, code=code, at=_cc_now())
+        _time.sleep(NET_CHECK_INTERVAL)
+
+
+threading.Thread(target=_net_loop, daemon=True).start()
+
+
+@app.route("/cc/monitor", methods=["GET", "POST"])
+def cc_monitor():
+    """GET 看当前连通状态；POST {url} 改监控网址(默认 google.com)。"""
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        url = (data.get("url") or "").strip()
+        if url:
+            if not url.startswith(("http://", "https://")):
+                url = "https://" + url
+            with _net_lock:
+                _net_status.update(url=url, ok=None, code=None, at=None)
+    with _net_lock:
+        return jsonify(dict(_net_status))
 
 
 if __name__ == "__main__":
