@@ -6,11 +6,11 @@
   <title>Claude Office · 3D 微缩原型</title>
   <style>
     :root {
-      /* 暖色胶片调色锚点（富士/徕卡向）—— 通透、低饱、暖白平衡 */
-      --grade-saturate: 1.06;
-      --grade-contrast: 1.04;
+      /* 白天：徕卡复古胶片暖调 —— 暖白平衡、通透、富层次、柔暗角 */
+      --grade-saturate: 1.05;
+      --grade-contrast: 1.03;
       --grade-brightness: 1.02;
-      --vignette: rgba(20, 16, 10, 0.42);
+      --vignette: rgba(42, 30, 16, 0.34);
       --tilt-blur: 3.2px;
       --tilt-band: 20%;
     }
@@ -23,8 +23,12 @@
     }
     /* 夜间：暖灯、压暗、室内屏幕更亮 */
     body[data-tod="night"] {
-      background: radial-gradient(120% 120% at 50% 16%, #2a2740 0%, #1d1b2e 52%, #12111d 100%);
-      --vignette: rgba(4, 3, 10, 0.62);
+      /* 夜间：Tokyo Night 霓虹赛博 —— 深靛蓝底，提亮(brightness/saturate)保可读，冷调暗角 */
+      background: radial-gradient(120% 120% at 50% 16%, #24283b 0%, #1a1b26 55%, #16161e 100%);
+      --grade-saturate: 1.2;
+      --grade-contrast: 1.05;
+      --grade-brightness: 1.08;
+      --vignette: rgba(10, 11, 26, 0.5);
     }
 
     #stage { position: fixed; inset: 0; }
@@ -39,13 +43,15 @@
       backdrop-filter: saturate(var(--grade-saturate)) contrast(var(--grade-contrast)) brightness(var(--grade-brightness));
       -webkit-backdrop-filter: saturate(var(--grade-saturate)) contrast(var(--grade-contrast)) brightness(var(--grade-brightness));
     }
-    /* 暖光叠加（柔光），给富士那种奶油暖调 */
+    /* 白天：徕卡复古暖调（奶油暖光 + 顶部冷天光，柔光叠加） */
     .grade.warm {
-      background: linear-gradient(180deg, rgba(255, 214, 150, 0.10), rgba(255, 180, 120, 0.04) 40%, rgba(120, 150, 255, 0.05));
+      background: linear-gradient(180deg, rgba(255, 216, 156, 0.12), rgba(255, 184, 122, 0.05) 42%, rgba(150, 170, 255, 0.05));
       mix-blend-mode: soft-light;
     }
+    /* 夜间：Tokyo Night 霓虹（青 #7dcfff → 紫 #bb9af7 → 蓝 #7aa2f7），screen 叠加提亮发光 */
     body[data-tod="night"] .grade.warm {
-      background: linear-gradient(180deg, rgba(255, 170, 90, 0.14), rgba(120, 90, 200, 0.10));
+      background: linear-gradient(180deg, rgba(125, 207, 255, 0.13), rgba(187, 154, 247, 0.13) 55%, rgba(122, 162, 247, 0.09));
+      mix-blend-mode: screen;
     }
     /* 暗角 */
     .grade.vignette {

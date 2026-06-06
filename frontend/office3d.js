@@ -76,21 +76,23 @@ scene.add(fill);
 // 配色复用 2D office.js 的 SKY_GRAD，让 3D 与 2D 视觉一致。
 // 每种 sky × 昼夜：bg=天空渐变, sun=[色,强度,[x,y,z]], hemi=[天色,地色,强度],
 //                  exp=曝光, shadow=阴影柔度, fog=雾密度, fx=粒子, flash=雷暴闪
+// 白天=徕卡复古胶片暖调（暖、通透、富层次）；夜间=Tokyo Night 霓虹赛博（深靛蓝底 #1a1b26/#24283b
+// + 荧光蓝月光 #7aa2f7 / 青 #7dcfff / 紫 #bb9af7），半球天光提亮近一倍、曝光抬到 ~1.0 解决"太暗看不清"。
 const SKY = {
-  clear:  { day:{ bg:["#bfe3f5","#eef5ec"], sun:[0xfff1da,2.3,[20,36,12]], hemi:[0xcfeaff,0x6b5a44,0.5],  exp:1.07, shadow:4.5, fog:0 },
-            night:{ bg:["#0e1220","#232b3e"], sun:[0xaab8ff,0.5,[-14,30,-8]], hemi:[0x29344f,0x12100d,0.22], exp:0.9,  shadow:8,  fog:0 } },
-  partly: { day:{ bg:["#bcd8e8","#e7efe9"], sun:[0xfff0d8,1.9,[18,34,12]], hemi:[0xc8e0ee,0x6b5a44,0.6],  exp:1.05, shadow:5.5, fog:0 },
-            night:{ bg:["#121829","#2c3550"], sun:[0x9fb0ff,0.45,[-12,28,-6]], hemi:[0x2a3550,0x14110e,0.25], exp:0.9,  shadow:8,  fog:0 } },
-  cloudy: { day:{ bg:["#9aaab8","#d2dae0"], sun:[0xf2f3f5,1.05,[10,38,8]], hemi:[0xccd5dc,0x70655a,0.95], exp:1.0,  shadow:13, fog:0.012 },
-            night:{ bg:["#1b2236","#3a4254"], sun:[0x9aa6c4,0.3,[-8,30,-4]],  hemi:[0x36405a,0x16140f,0.32], exp:0.88, shadow:14, fog:0.014 } },
-  fog:    { day:{ bg:["#c4c9cd","#e6e9ea"], sun:[0xeceef0,0.7,[8,40,6]],   hemi:[0xd6dadd,0x8a8378,1.05], exp:0.98, shadow:18, fog:0.05 },
-            night:{ bg:["#23262e","#444a54"], sun:[0x9aa0ac,0.22,[-6,32,-2]], hemi:[0x3a3f49,0x18160f,0.34], exp:0.86, shadow:18, fog:0.06 } },
-  rain:   { day:{ bg:["#6f7a86","#aab4be"], sun:[0xc9d2da,0.7,[8,34,8]],   hemi:[0xaab6c0,0x5a5448,0.9],  exp:0.96, shadow:16, fog:0.02,  fx:"rain" },
-            night:{ bg:["#1a2230","#39424f"], sun:[0x8a96b0,0.26,[-6,28,-4]], hemi:[0x303a4a,0x14120e,0.32], exp:0.85, shadow:16, fog:0.024, fx:"rain" } },
-  storm:  { day:{ bg:["#565d68","#8a929c"], sun:[0xb9c2cc,0.55,[6,32,6]],  hemi:[0x9aa4ae,0x4e4840,0.85], exp:0.93, shadow:17, fog:0.028, fx:"rain", flash:true },
-            night:{ bg:["#13171f","#2c333f"], sun:[0x7d88a0,0.22,[-5,26,-3]], hemi:[0x2a323e,0x12100d,0.3],  exp:0.82, shadow:17, fog:0.03,  fx:"rain", flash:true } },
-  snow:   { day:{ bg:["#aebcca","#e8eef4"], sun:[0xeaf0f6,1.0,[12,36,10]], hemi:[0xd2dde8,0x7a756a,0.95], exp:1.02, shadow:13, fog:0.018, fx:"snow" },
-            night:{ bg:["#222a3c","#444c60"], sun:[0x9fb0ff,0.34,[-8,30,-5]], hemi:[0x36405a,0x16140f,0.34], exp:0.9,  shadow:14, fog:0.02,  fx:"snow" } },
+  clear:  { day:{ bg:["#cfe6f2","#f3ecdd"], sun:[0xffe7c2,2.2,[20,36,12]],  hemi:[0xdbecff,0x7c6b50,0.55], exp:1.06, shadow:4.5, fog:0 },
+            night:{ bg:["#24283b","#16161e"], sun:[0x7aa2f7,0.95,[-14,30,-8]], hemi:[0x6b74a8,0x1a1b26,0.62], exp:1.03, shadow:7,  fog:0 } },
+  partly: { day:{ bg:["#c9dde7","#f0e9da"], sun:[0xffe4ba,1.9,[18,34,12]],  hemi:[0xd2e4f0,0x7c6b50,0.62], exp:1.05, shadow:5.5, fog:0 },
+            night:{ bg:["#272b40","#17171f"], sun:[0x7aa2f7,0.9,[-12,28,-6]], hemi:[0x68719f,0x1a1b26,0.6],  exp:1.02, shadow:8,  fog:0 } },
+  cloudy: { day:{ bg:["#aab4bd","#dcdbcf"], sun:[0xf3ede0,1.1,[10,38,8]],   hemi:[0xd2d6cf,0x83745c,0.95], exp:1.0,  shadow:13, fog:0.012 },
+            night:{ bg:["#2a2e42","#1a1b26"], sun:[0x8aa0e0,0.6,[-8,30,-4]],  hemi:[0x565f89,0x16161e,0.62], exp:1.0,  shadow:14, fog:0.012 } },
+  fog:    { day:{ bg:["#cbccc6","#ebe7da"], sun:[0xefe9dc,0.8,[8,40,6]],    hemi:[0xdcdcd2,0x968a73,1.05], exp:0.99, shadow:18, fog:0.05 },
+            night:{ bg:["#33384d","#23263a"], sun:[0x8e9cc8,0.5,[-6,32,-2]],  hemi:[0x5a6390,0x1a1b26,0.66], exp:1.0,  shadow:18, fog:0.05 } },
+  rain:   { day:{ bg:["#7a828c","#b3b6ab"], sun:[0xd0d2c4,0.85,[8,34,8]],   hemi:[0xb3b8b0,0x6a6450,0.9],  exp:0.98, shadow:16, fog:0.02,  fx:"rain" },
+            night:{ bg:["#1f2335","#13131a"], sun:[0x7dcfff,0.6,[-6,28,-4]],  hemi:[0x4a5384,0x16161e,0.6],  exp:1.0,  shadow:16, fog:0.02,  fx:"rain" } },
+  storm:  { day:{ bg:["#5f6671","#8e958c"], sun:[0xbfc6bc,0.7,[6,32,6]],    hemi:[0xa2aaa0,0x5a5440,0.85], exp:0.95, shadow:17, fog:0.026, fx:"rain", flash:true },
+            night:{ bg:["#1a1b26","#101017"], sun:[0xbb9af7,0.55,[-5,26,-3]], hemi:[0x494f7a,0x121219,0.58], exp:0.98, shadow:17, fog:0.028, fx:"rain", flash:true } },
+  snow:   { day:{ bg:["#b6c2cd","#ecefe6"], sun:[0xf3f0e6,1.05,[12,36,10]], hemi:[0xd8ddd6,0x80796a,0.95], exp:1.02, shadow:13, fog:0.016, fx:"snow" },
+            night:{ bg:["#2a2e44","#1a1b2a"], sun:[0x9ec0ff,0.6,[-8,30,-5]],  hemi:[0x5a6390,0x17171f,0.66], exp:1.02, shadow:14, fog:0.018, fx:"snow" } },
 };
 
 // 雨雪粒子（THREE.Points，世界空间罩住整栋楼）
@@ -154,7 +156,10 @@ function applyWeather(sky, isDay, city, temp) {
   sun.shadow.radius = c.shadow;
   hemi.color.setHex(c.hemi[0]); hemi.groundColor.setHex(c.hemi[1]); hemi.intensity = c.hemi[2];
   renderer.toneMappingExposure = EXP > 0 ? EXP : c.exp;
-  fill.intensity = tod === "night" ? 0.18 : 0.34;
+  fill.intensity = tod === "night" ? 0.34 : 0.34;
+  fill.color.setHex(tod === "night" ? 0x7aa2f7 : 0xbcd0ff);          // 夜间补光染 Tokyo 霓虹蓝
+  screenMat.emissive.setHex(tod === "night" ? 0x7dcfff : 0x2f9bd6);   // 夜间办公室窗户发霓虹冷光
+  screenMat.emissiveIntensity = tod === "night" ? 1.9 : 0.9;
   studio.material.opacity = (key === "clear" || key === "partly") ? (tod === "night" ? 0.12 : 0.2) : 0.07;
   // 线性雾按相机距离取 near/far，避免正交远距相机被指数雾整片抹白（永不吞没场景）
   const fogD = c.fog * FOGK;
@@ -267,6 +272,8 @@ function makeMonster() {
 }
 
 // ── 一间办公室：地板 + 两面矮墙 + 桌屏 ───────────────────────────────
+// 窗屏材质提到模块级共享：applyWeather 夜间把它调成 Tokyo 霓虹冷光。
+const screenMat = mat(0x16324a, { emissive: 0x2f9bd6, ei: 0.9 });
 function buildRoom(accent) {
   const g = new THREE.Group();
   const floor = meshRB(ROOM, 0.16, ROOM, 0.06, mat(accent, { rough: 0.9 }), false, true);
@@ -282,7 +289,6 @@ function buildRoom(accent) {
   skirt.position.set(0, 0.5, -ROOM / 2 + 0.07); g.add(skirt);
   // 沿墙摆几张桌子 + 发光屏
   const deskMat = mat(0xc99a6b, { rough: 0.65 });
-  const screenMat = mat(0x16324a, { emissive: 0x2f9bd6, ei: 0.9 });
   const seats = [];
   const spots = [[-ROOM / 2 + 0.9, -0.5], [-ROOM / 2 + 0.9, 0.7], [0.4, -ROOM / 2 + 0.9], [1.4, -ROOM / 2 + 0.9]];
   spots.forEach(([x, z], i) => {
