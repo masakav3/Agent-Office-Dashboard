@@ -216,7 +216,7 @@ function applyWeather(sky, isDay, city, temp) {
   amb.color.setHex(tod === "night" ? 0x8ea0d8 : 0xffffff);
   screenGlow.color.setRGB(...(tod === "night" ? [0.5, 1.8, 2.4] : [0.95, 1.7, 2.1]));   // 屏幕开机发光(日夜都亮,HDR入Bloom)
   // 阈值调高：只让真正的发光体(屏幕/光盘 HDR>1)晕开，避免被照亮的墙地一起发光糊成一团
-  bloom.strength = BLOOM > 0 ? BLOOM : (tod === "night" ? 0.5 : 0.22);
+  bloom.strength = BLOOM > 0 ? BLOOM : (tod === "night" ? 0.35 : 0.3);   // 夜降到0.35(不过曝)/日提到0.3(LED也晕开)
   bloom.radius = tod === "night" ? 0.5 : 0.4;
   bloom.threshold = tod === "night" ? 0.72 : 0.85;
   studio.material.opacity = (key === "clear" || key === "partly") ? (tod === "night" ? 0.12 : 0.2) : 0.07;
@@ -389,7 +389,7 @@ const screenMat = mat(0x16324a, { emissive: 0x2f9bd6, ei: 0.9 });
 // 显示器"屏幕发光面"：始终亮(开机感) + HDR/toneMapped:false 入 Bloom；applyWeather 调日夜色温
 const screenGlow = new THREE.MeshBasicMaterial({ toneMapped: false, side: THREE.DoubleSide });
 screenGlow.color.setRGB(0.55, 1.5, 2.0);
-const SCREEN_GEO = new THREE.PlaneGeometry(0.34, 0.22);   // 贴显示器屏面的发光片(模型本地尺寸)
+const SCREEN_GEO = new THREE.PlaneGeometry(0.3, 0.19);    // 贴显示器屏面的发光片(屏内尺寸,本地)
 // L 形 LED 灯管：颜色 = 主 Agent 状态（HDR 入 Bloom）
 const LED_COLOR = {
   error: 0xff2d4f,        // 红
@@ -403,7 +403,7 @@ const LED_COLOR = {
 };
 function setLed(m, state) {
   const c = new THREE.Color(LED_COLOR[state] || 0x9aa3b2);
-  const b = LEDB > 0 ? LEDB : 3.4;                    // 霓虹辉光亮度(HDR 入 Bloom；?led= 可调)
+  const b = LEDB > 0 ? LEDB : 4.2;                    // 霓虹辉光亮度(HDR 入 Bloom；?led= 可调)
   m.color.setRGB(c.r * b, c.g * b, c.b * b);
 }
 function buildRoom(accent) {
@@ -447,7 +447,7 @@ function buildRoom(accent) {
         const mon = MODELS.computerScreen.clone(); mon.scale.setScalar(fs * 1.15);
         mon.position.set(x + off, FY + dh, z - DESK_FWD - 0.05);
         const glow = new THREE.Mesh(SCREEN_GEO, screenGlow);
-        glow.position.set(0, 0.155, 0.057);            // 贴合在显示器屏面(本地坐标,非浮空)
+        glow.position.set(0, 0.15, 0.046); glow.rotation.x = -0.12;   // 贴合屏面:更贴近 + 配屏幕小倾角
         mon.add(glow);
         g.add(mon);
       }
