@@ -85,6 +85,15 @@
     .legend .it { display: inline-flex; align-items: center; gap: 5px; }
     .legend .dot { width: 9px; height: 9px; border-radius: 3px; box-shadow: 0 0 7px currentColor; }
 
+    /* 墙顶 LED 状态图例（左侧） */
+    .ledlegend { top: 100px; left: 26px; display: flex; flex-direction: column; gap: 5px;
+      font-size: 11.5px; padding: 10px 13px; border-radius: 12px;
+      background: rgba(255, 255, 255, 0.42); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+    body[data-tod="night"] .ledlegend { background: rgba(24, 26, 40, 0.5); }
+    .ledlegend .lt { font-weight: 700; font-size: 10.5px; opacity: .62; letter-spacing: .4px; margin-bottom: 2px; }
+    .ledlegend .li { display: flex; align-items: center; gap: 8px; }
+    .ledlegend .ls { width: 18px; height: 7px; border-radius: 3px; border: 1px solid rgba(0, 0, 0, .18); flex: none; }
+
     .hint { bottom: 18px; left: 50%; transform: translateX(-50%); font-size: 12px; opacity: .6;
       display: flex; gap: 16px; }
     .hud { bottom: 16px; right: 22px; font-size: 11px; opacity: .6; text-align: right; line-height: 1.5; }
@@ -125,6 +134,7 @@
   </header>
 
   <div class="ui legend" id="legend"></div>
+  <div class="ui ledlegend" id="ledlegend"></div>
 
   <div class="ui controls">
     <button id="btnRotate" aria-pressed="false">自转</button>

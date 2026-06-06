@@ -668,6 +668,21 @@ const legend = document.getElementById("legend");
 legend.innerHTML =
   '<span class="it"><span class="dot" style="background:#ff2d4f;color:#ff2d4f"></span>主 Agent</span>' +
   '<span class="it"><span class="dot" style="background:#ffffff;color:#ffffff"></span>子代理</span>';
+
+// 墙顶 LED 状态图例（颜色对齐 LED_COLOR）
+const LED_LEGEND = [
+  ["#39c5bb", "进行中 executing"],
+  ["#4aa8ff", "思考中 thinking"],
+  ["#ffffff", "工具调用 tool-use"],
+  ["#ffa33d", "待授权 waiting"],
+  ["#bb9af7", "派活 delegating"],
+  ["#ff2d4f", "出错 error"],
+  ["#ffd23d", "automode 自动模式"],
+  ["#6b7280", "待命 idle"],
+];
+document.getElementById("ledlegend").innerHTML =
+  '<div class="lt">墙顶 LED · 主 Agent 状态</div>' +
+  LED_LEGEND.map(([c, l]) => `<span class="li"><span class="ls" style="background:${c};box-shadow:0 0 9px ${c},0 0 4px ${c}"></span>${l}</span>`).join("");
 const btnRotate = document.getElementById("btnRotate");
 btnRotate.addEventListener("click", () => {
   autoRotate = !autoRotate; btnRotate.setAttribute("aria-pressed", String(autoRotate));
