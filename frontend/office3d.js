@@ -389,6 +389,7 @@ const screenMat = mat(0x16324a, { emissive: 0x2f9bd6, ei: 0.9 });
 // 显示器"屏幕发光面"：始终亮(开机感) + HDR/toneMapped:false 入 Bloom；applyWeather 调日夜色温
 const screenGlow = new THREE.MeshBasicMaterial({ toneMapped: false, side: THREE.DoubleSide });
 screenGlow.color.setRGB(0.55, 1.5, 2.0);
+const SCREEN_GEO = new THREE.PlaneGeometry(0.34, 0.22);   // 贴显示器屏面的发光片(模型本地尺寸)
 // L 形 LED 灯管：颜色 = 主 Agent 状态（HDR 入 Bloom）
 const LED_COLOR = {
   error: 0xff2d4f,        // 红
@@ -441,10 +442,14 @@ function buildRoom(accent) {
   stations.forEach(([x, z, screens]) => {
     if (MODELS.desk) {
       const desk = MODELS.desk.clone(); desk.scale.setScalar(fs); desk.position.set(x, FY, z - DESK_FWD); g.add(desk);
-      for (let s = 0; s < screens; s++) {              // 真显示器朝 +z(朝人)；屏幕发光=显示器本体材质(见 applyWeather)
+      for (let s = 0; s < screens; s++) {              // 真显示器朝 +z(朝人) + 屏面贴合发光片(子物体,随屏走,入Bloom)
         const off = (s - (screens - 1) / 2) * 0.66;
         const mon = MODELS.computerScreen.clone(); mon.scale.setScalar(fs * 1.15);
-        mon.position.set(x + off, FY + dh, z - DESK_FWD - 0.05); g.add(mon);
+        mon.position.set(x + off, FY + dh, z - DESK_FWD - 0.05);
+        const glow = new THREE.Mesh(SCREEN_GEO, screenGlow);
+        glow.position.set(0, 0.155, 0.057);            // 贴合在显示器屏面(本地坐标,非浮空)
+        mon.add(glow);
+        g.add(mon);
       }
       if (MODELS.chairDesk) {
         const ch = MODELS.chairDesk.clone(); ch.scale.setScalar(fs); ch.rotation.y = Math.PI; ch.position.set(x, FY, z); g.add(ch);
