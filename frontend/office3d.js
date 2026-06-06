@@ -320,8 +320,7 @@ function prepModel(scene) {
 async function preloadModels() {
   const loader = new GLTFLoader();
   const furn = ["desk", "chairDesk", "computerScreen",            // 工位
-    "pottedPlant", "plantSmall1", "plantSmall2", "bookcaseOpen",  // 美式办公摆件
-    "loungeSofa", "sideTable", "lampRoundFloor", "rugRectangle", "trashcan"];
+    "pottedPlant", "bookcaseOpen", "books", "lampRoundFloor", "rugRectangle"];  // 精简摆件 + 书架的书
   for (const f of furn) {
     const g = await loader.loadAsync(GLTF_BASE + f + ".glb"); MODELS[f] = prepModel(g.scene);
   }
@@ -473,14 +472,18 @@ function buildRoom(accent) {
     const rug = MODELS.rugRectangle.clone();
     rug.scale.set(fs * 2.8, fs, fs * 3.4); rug.position.set(0, FY + 0.015, -0.4); g.add(rug);
   }
-  prop("bookcaseOpen", half - 0.7, -half + 0.55, 0);          // 书架靠后墙右角
-  prop("pottedPlant", -half + 0.6, half - 0.7, 0, 1.1);       // 绿植 前左角
-  prop("pottedPlant", half - 0.65, half - 0.7, 0, 1.1);       // 绿植 前右角
-  prop("plantSmall2", half - 0.7, -half + 1.7, 0, 1.1);       // 小绿植 右后
-  prop("loungeSofa", -half + 1.1, half - 1.3, -Math.PI / 2);  // 休息沙发 前左
-  prop("sideTable", -half + 1.1, half - 2.5, 0, 0.9);         // 边几
-  prop("lampRoundFloor", -half + 0.6, -half + 0.7, 0);        // 落地灯 后左角
-  prop("trashcan", 2.1, half - 1.1, 0, 0.85);                 // 垃圾桶
+  prop("pottedPlant", half - 0.65, half - 0.7, 0, 1.1);       // 绿植(保留一个) 前右角
+  prop("lampRoundFloor", -half + 0.6, half - 0.7, 0);         // 落地灯 前左角
+  if (MODELS.bookcaseOpen) {                                  // 书架靠后墙右角 + 架上摆书
+    const bc = MODELS.bookcaseOpen.clone(); bc.scale.setScalar(fs);
+    bc.position.set(half - 0.7, FY, -half + 0.55);
+    if (MODELS.books) {   // books 作为子物体随架走，摆 3 层书
+      [[-0.09, 0.12, 0], [0.07, 0.12, Math.PI], [-0.04, 0.4, 0], [0.08, 0.66, 0]].forEach(([bx, by, br]) => {
+        const bk = MODELS.books.clone(); bk.position.set(bx, by, 0.0); bk.rotation.y = br; bc.add(bk);
+      });
+    }
+    g.add(bc);
+  }
   g.userData = { seats, ledMat };
   return g;
 }
@@ -522,7 +525,7 @@ function makeNamePlate(label) {
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
   const pl = new THREE.Mesh(new THREE.PlaneGeometry(2.7, 0.76),
     new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
-  pl.rotation.x = -Math.PI / 2; pl.rotation.z = Math.PI;     // 平铺地面 + 转正朝镜头可读
+  pl.rotation.x = -Math.PI / 2; pl.rotation.z = 0;           // 平铺地面 + 朝镜头正向可读(翻正)
   pl.position.set(0, 0.175, ROOM / 2 - 0.95);                // 朝镜头一侧的前缘
   pl.renderOrder = 2;
   return pl;
