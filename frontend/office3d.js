@@ -27,7 +27,7 @@ const stOf = (s) => STATE[s] || STATE.idle;
 
 // 房间部门配色池（楼层地板/墙裙的暖色低饱调）
 const ACCENTS = [0xe8a36b, 0x6fa8c7, 0x8bbf8f, 0xc78fb0, 0xd9b15e, 0x8e88c4, 0xcf8d72];
-const ROOM = 6.2;          // 每间办公室占地（世界单位；容纳 主三联屏 + 4 子单屏，不挤）
+const ROOM = 7.5;          // 每间办公室占地（世界单位；容纳 主三联屏 + 4 子单屏坐姿工位，宽松）
 const GAP = 0.5;           // 房间间隔
 const WALL_H = 1.05;       // 矮墙（开放式娃娃屋视角）
 const POLL_MS = 2500;
@@ -98,6 +98,8 @@ scene.add(sun);
 const fill = new THREE.DirectionalLight(0xbcd0ff, 0.35);  // 冷补光（天光）
 fill.position.set(-16, 14, -10);
 scene.add(fill);
+const amb = new THREE.AmbientLight(0xffffff, 0.18);      // 环境底光：抬暗面，杜绝夜间小人纯黑（applyWeather 按昼夜调）
+scene.add(amb);
 
 // ── 天气驱动光照 + 天空 + 雨雪粒子（呼应 2D 版"窗外天气"彩蛋）────────────
 // 配色复用 2D office.js 的 SKY_GRAD，让 3D 与 2D 视觉一致。
@@ -206,6 +208,12 @@ function applyWeather(sky, isDay, city, temp) {
   // 发光体：夜间霓虹冷光更亮、白天也给足亮度(此前偏暗)；Bloom 让它们真正晕开光晕
   screenMat.emissive.setHex(tod === "night" ? 0x7dcfff : 0x4fb6e8);
   screenMat.emissiveIntensity = (tod === "night" ? 2.8 : 1.6) * (GLOW > 0 ? GLOW : 1);
+  if (MODELS._scr) {                                  // 真显示器屏幕发霓虹冷光
+    MODELS._scr.emissive.setHex(tod === "night" ? 0x7dcfff : 0x3fa9e0);
+    MODELS._scr.emissiveIntensity = (tod === "night" ? 2.2 : 1.2) * (GLOW > 0 ? GLOW : 1);
+  }
+  amb.intensity = tod === "night" ? 0.5 : 0.2;        // 夜间抬环境底光，杜绝小人纯黑
+  amb.color.setHex(tod === "night" ? 0x8ea0d8 : 0xffffff);
   // 阈值调高：只让真正的发光体(屏幕/光盘 HDR>1)晕开，避免被照亮的墙地一起发光糊成一团
   bloom.strength = BLOOM > 0 ? BLOOM : (tod === "night" ? 0.5 : 0.22);
   bloom.radius = tod === "night" ? 0.5 : 0.4;
@@ -292,10 +300,11 @@ const MODELS = {}, CLIPS = {}, CHAR_KEYS = [];
 const BOSS_CHAR = "character-male-d";
 const CHAR_H = 1.5;
 // agent 状态 → 骨骼动画（Mini Characters 自带 32 个 clip）
+// 工位是坐姿办公室：全员坐(sit)；活动靠发光屏 + 红/白光盘体现(后续可补坐姿打字变体)
 const STATE_CLIP = {
-  idle: "idle", thinking: "idle", waiting: "idle", researching: "idle",
-  writing: "interact-right", executing: "interact-right", working: "interact-right",
-  delegating: "emote-yes", error: "emote-no",
+  idle: "sit", thinking: "sit", waiting: "sit", researching: "sit",
+  writing: "sit", executing: "sit", working: "sit",
+  delegating: "sit", error: "sit",
 };
 function prepModel(scene) {
   scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
@@ -312,6 +321,12 @@ async function preloadModels() {
     const g = await loader.loadAsync(GLTF_BASE + f + ".glb"); MODELS[f] = prepModel(g.scene);
   }
   MODELS._fs = 1.3 / Math.max(0.001, MODELS.desk.userData.size.x);   // 家具统一缩放：desk 宽→1.3
+  MODELS.computerScreen.traverse((o) => {     // 抓显示器"屏幕"材质(metalDark)以便夜间发霓虹光
+    if (!o.isMesh) return;
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach((mm) => {
+      if (mm && /dark|screen/i.test(mm.name || "")) { MODELS._scr = mm; mm.toneMapped = false; }
+    });
+  });
   const cs = ["character-male-a", "character-male-b", "character-male-c", "character-male-d", "character-male-e", "character-male-f",
               "character-female-a", "character-female-b", "character-female-c", "character-female-d", "character-female-e", "character-female-f"];
   for (const n of cs) {
@@ -380,36 +395,38 @@ function buildRoom(accent) {
   wx.position.set(-ROOM / 2 + 0.06, WALL_H / 2 + 0.16, 0); g.add(wx);
   const skirt = meshRB(ROOM, 0.1, 0.14, 0.02, mat(accent, { rough: 0.6 }));
   skirt.position.set(0, 0.5, -ROOM / 2 + 0.07); g.add(skirt);
-  // 工位：1 主(三联屏) + 4 子(单屏)；Kenney desk+chairDesk + 发光屏(screenMat 驱动 Tokyo 霓虹)
+  // 工位：1 主(三联屏) + 4 子(单屏)；Kenney desk + 真显示器 computerScreen + chairDesk，人坐椅上朝桌
   const fs = MODELS._fs || 1, FY = 0.16;
+  const dh = (MODELS.desk && MODELS.desk.userData.size.y || 0.38) * fs;   // 桌面高
+  const half = ROOM / 2, WALLPAD = 1.0, SEAT_OFF = 1.05;
   const seats = [];
-  // [x, z, ry, screens]  ry=朝向(贴左墙转90°/贴后墙不转)；stations[0]=主 Agent
+  // [x, z, ry, screens]  ry=0:桌靠后(-z)墙/人朝-z；ry=PI/2:桌靠左(-x)墙/人朝-x。stations[0]=主
   const stations = [
-    [0, -ROOM / 2 + 1.1, 0, 3],                 // 主：后墙中央，三联屏
-    [-2.5, -ROOM / 2 + 1.1, 0, 1],              // 子：后墙左
-    [2.5, -ROOM / 2 + 1.1, 0, 1],               // 子：后墙右
-    [-ROOM / 2 + 1.1, 0.1, Math.PI / 2, 1],     // 子：左墙上
-    [-ROOM / 2 + 1.1, 2.0, Math.PI / 2, 1],     // 子：左墙下
+    [0, -half + WALLPAD, 0, 3],                  // 主：后墙中央，三联屏
+    [-2.9, -half + WALLPAD, 0, 1],               // 子：后墙左
+    [2.9, -half + WALLPAD, 0, 1],                // 子：后墙右
+    [-half + WALLPAD, -1.0, Math.PI / 2, 1],     // 子：左墙上
+    [-half + WALLPAD, 1.8, Math.PI / 2, 1],      // 子：左墙下
   ];
   stations.forEach(([x, z, ry, screens]) => {
+    const along = ry !== 0;   // true=左墙(沿 z 排), false=后墙(沿 x 排)
     if (MODELS.desk) {
       const desk = MODELS.desk.clone(); desk.scale.setScalar(fs); desk.position.set(x, FY, z); desk.rotation.y = ry; g.add(desk);
-      const dh = (MODELS.desk.userData.size.y || 0.7) * fs;
-      for (let s = 0; s < screens; s++) {               // 三联屏沿桌宽方向排开
-        const off = (s - (screens - 1) / 2) * 0.56;
-        const scr = meshRB(0.48, 0.33, 0.05, 0.02, screenMat);
-        scr.position.set(x + (ry ? 0 : off), FY + dh + 0.2, z + (ry ? off : 0));
-        scr.rotation.y = ry; g.add(scr);
+      for (let s = 0; s < screens; s++) {                 // 真显示器：靠桌内侧(贴墙)、朝坐的人、三联屏沿桌宽排
+        const off = (s - (screens - 1) / 2) * 0.62;
+        const mon = MODELS.computerScreen.clone(); mon.scale.setScalar(fs * 1.15);
+        mon.position.set(x + (along ? -0.18 : off), FY + dh, z + (along ? off : -0.18));
+        mon.rotation.y = ry; g.add(mon);
       }
       if (MODELS.chairDesk) {
         const ch = MODELS.chairDesk.clone(); ch.scale.setScalar(fs); ch.rotation.y = ry + Math.PI;
-        ch.position.set(x + (ry ? 0.78 : 0), FY, z + (ry ? 0 : 0.78)); g.add(ch);
+        ch.position.set(x + (along ? SEAT_OFF : 0), FY, z + (along ? 0 : SEAT_OFF)); g.add(ch);
       }
     } else {   // 回退：程序化桌
       const desk = meshRB(0.95, 0.5, 0.6, 0.06, mat(0xc99a6b, { rough: 0.65 }));
       desk.position.set(x, 0.41, z); desk.rotation.y = ry; g.add(desk);
     }
-    seats.push({ x: x + (ry ? 1.2 : 0), z: z + (ry ? 0 : 1.2) });
+    seats.push({ x: x + (along ? SEAT_OFF : 0), z: z + (along ? 0 : SEAT_OFF), face: ry + Math.PI });
   });
   g.userData = { seats };
   return g;
@@ -455,8 +472,9 @@ function syncRooms(list) {
       group.position.set(p.x, 0, p.z);
       scene.add(group);
       const fig = makeFigure(true);
-      const bseat = shell.userData.seats[0] || { x: 0, z: 0 };   // 主 Agent 坐三联屏位
+      const bseat = shell.userData.seats[0] || { x: 0, z: 0, face: 0 };   // 主 Agent 坐三联屏位
       fig.position.set(bseat.x, 0.16, bseat.z);
+      fig.rotation.y = bseat.face || 0;          // 朝向显示器
       group.add(fig);
       rooms.set(r.sessionId, { group, fig, emps: [], monster: null, seats: shell.userData.seats, accent });
     });
@@ -471,6 +489,7 @@ function syncRooms(list) {
       const e = makeFigure(false);
       const s = room.seats[room.emps.length + 1];
       e.position.set(s.x, 0.16, s.z);
+      e.rotation.y = s.face || 0;                // 朝向显示器
       room.group.add(e); room.emps.push(e);
     }
     while (room.emps.length > want) { const e = room.emps.pop(); room.group.remove(e); }
