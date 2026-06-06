@@ -4,6 +4,10 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 
 // ── 状态语义色（与 2D office.js 的 STATES 对齐）──────────────────────────
 const STATE = {
@@ -55,6 +59,27 @@ controls.maxPolarAngle = Math.PI * 0.49;   // 不许钻到地板下
 controls.minZoom = 0.45;
 controls.maxZoom = 2.6;
 controls.target.set(0, 0.4, 0);
+
+// ── 后期 Bloom 辉光（Tokyo Night 霓虹的灵魂：发光体真的会晕开光晕）──────────
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.9, 0.55, 0.3);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+// 天空渐变背景（不透明，配合 Bloom；CSS 调色/移轴/暗角层仍叠在其上）
+let _skyTex = null;
+function skyTex(topHex, botHex) {
+  const cv = document.createElement("canvas"); cv.width = 8; cv.height = 256;
+  const g = cv.getContext("2d");
+  const grd = g.createLinearGradient(0, 0, 0, 256);
+  grd.addColorStop(0, topHex); grd.addColorStop(1, botHex);
+  g.fillStyle = grd; g.fillRect(0, 0, 8, 256);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  if (_skyTex) _skyTex.dispose();
+  _skyTex = tex; return tex;
+}
 
 // ── 灯光（软阴影 = 微缩模型质感的灵魂）────────────────────────────────
 const hemi = new THREE.HemisphereLight(0xfff4e2, 0x6b5a44, 0.55);
@@ -151,15 +176,21 @@ function applyWeather(sky, isDay, city, temp) {
   const c = SKY[key][tod];
   document.body.style.background = `radial-gradient(120% 120% at 50% 16%, ${c.bg[0]} 0%, ${c.bg[1]} 100%)`;
   document.body.dataset.tod = tod;
+  scene.background = skyTex(c.bg[0], c.bg[1]);                        // 不透明渐变天空(配合 Bloom)
   sun.color.setHex(c.sun[0]); sun.intensity = c.sun[1] * SUNK;
   sun.position.set(c.sun[2][0], c.sun[2][1], c.sun[2][2]);
   sun.shadow.radius = c.shadow;
   hemi.color.setHex(c.hemi[0]); hemi.groundColor.setHex(c.hemi[1]); hemi.intensity = c.hemi[2];
   renderer.toneMappingExposure = EXP > 0 ? EXP : c.exp;
-  fill.intensity = tod === "night" ? 0.34 : 0.34;
+  fill.intensity = 0.34;
   fill.color.setHex(tod === "night" ? 0x7aa2f7 : 0xbcd0ff);          // 夜间补光染 Tokyo 霓虹蓝
-  screenMat.emissive.setHex(tod === "night" ? 0x7dcfff : 0x2f9bd6);   // 夜间办公室窗户发霓虹冷光
-  screenMat.emissiveIntensity = tod === "night" ? 1.9 : 0.9;
+  // 发光体：夜间霓虹冷光更亮、白天也给足亮度(此前偏暗)；Bloom 让它们真正晕开光晕
+  screenMat.emissive.setHex(tod === "night" ? 0x7dcfff : 0x4fb6e8);
+  screenMat.emissiveIntensity = (tod === "night" ? 2.8 : 1.6) * (GLOW > 0 ? GLOW : 1);
+  // 阈值调高：只让真正的发光体(屏幕/光盘 HDR>1)晕开，避免被照亮的墙地一起发光糊成一团
+  bloom.strength = BLOOM > 0 ? BLOOM : (tod === "night" ? 0.6 : 0.22);
+  bloom.radius = tod === "night" ? 0.5 : 0.4;
+  bloom.threshold = tod === "night" ? 0.72 : 0.85;
   studio.material.opacity = (key === "clear" || key === "partly") ? (tod === "night" ? 0.12 : 0.2) : 0.07;
   // 线性雾按相机距离取 near/far，避免正交远距相机被指数雾整片抹白（永不吞没场景）
   const fogD = c.fog * FOGK;
@@ -188,6 +219,8 @@ const PSIZE = parseFloat(_wq.get("psize")) || 0;                  // 粒子像�
 const FOGK = _wq.get("fog") != null ? parseFloat(_wq.get("fog")) : 1;   // 雾强度倍数(0=关)
 const SUNK = _wq.get("sun") != null ? parseFloat(_wq.get("sun")) : 1;   // 主光强度倍数
 const EXP = parseFloat(_wq.get("exp")) || 0;                      // 曝光覆盖(0=用默认)
+const BLOOM = parseFloat(_wq.get("bloom")) || 0;                 // 辉光强度覆盖(0=按昼夜默认)
+const GLOW = parseFloat(_wq.get("glow")) || 0;                   // 屏幕发光强度倍数(0=默认)
 
 // ── 材质/几何工具 ─────────────────────────────────────────────────────
 const matCache = new Map();
@@ -421,7 +454,7 @@ function loop() {
   controls.autoRotate = autoRotate;
   controls.autoRotateSpeed = 0.6;
   controls.update();
-  renderer.render(scene, camera);
+  composer.render();                                    // 经 Bloom 后期合成
 }
 renderer.setAnimationLoop(loop);
 
@@ -429,6 +462,7 @@ renderer.setAnimationLoop(loop);
 function resize() {
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h);
+  composer.setSize(w, h);
   const a = w / h;
   camera.left = -viewSize * a; camera.right = viewSize * a;
   camera.top = viewSize; camera.bottom = -viewSize;
