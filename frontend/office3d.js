@@ -8,6 +8,8 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { clone as skClone } from "three/addons/utils/SkeletonUtils.js";
 
 // ── 状态语义色（与 2D office.js 的 STATES 对齐）──────────────────────────
 const STATE = {
@@ -284,27 +286,70 @@ function buildBase(cols, rows) {
   baseSlab.add(lawn);
 }
 
-// ── 角色：chibi 小人（圆角身体 + 头 + 脚下状态光盘）───────────────────
+// ── Kenney CC0 资产：GLTF 模型加载 + 按状态播骨骼动画 ────────────────────
+const GLTF_BASE = "/static/vendor/kenney/";
+const MODELS = {}, CLIPS = {}, CHAR_KEYS = [];
+const BOSS_CHAR = "character-male-d";
+const CHAR_H = 1.5;
+// agent 状态 → 骨骼动画（Mini Characters 自带 32 个 clip）
+const STATE_CLIP = {
+  idle: "idle", thinking: "idle", waiting: "idle", researching: "idle",
+  writing: "interact-right", executing: "interact-right", working: "interact-right",
+  delegating: "emote-yes", error: "emote-no",
+};
+function prepModel(scene) {
+  scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  const box = new THREE.Box3().setFromObject(scene);
+  const c = box.getCenter(new THREE.Vector3());
+  scene.position.set(-c.x, -box.min.y, -c.z);   // 居中 xz + 底/脚贴 y=0
+  const wrap = new THREE.Group(); wrap.add(scene);
+  wrap.userData.size = box.getSize(new THREE.Vector3());
+  return wrap;
+}
+async function preloadModels() {
+  const loader = new GLTFLoader();
+  for (const f of ["desk", "chairDesk", "computerScreen"]) {
+    const g = await loader.loadAsync(GLTF_BASE + f + ".glb"); MODELS[f] = prepModel(g.scene);
+  }
+  MODELS._fs = 1.3 / Math.max(0.001, MODELS.desk.userData.size.x);   // 家具统一缩放：desk 宽→1.3
+  const cs = ["character-male-a", "character-male-b", "character-male-c", "character-male-d", "character-male-e", "character-male-f",
+              "character-female-a", "character-female-b", "character-female-c", "character-female-d", "character-female-e", "character-female-f"];
+  for (const n of cs) {
+    const g = await loader.loadAsync(GLTF_BASE + n + ".glb");
+    MODELS[n] = prepModel(g.scene); CLIPS[n] = g.animations; CHAR_KEYS.push(n);
+  }
+}
+function playClip(u, name) {
+  if (!u.mixer || !u.clips || u.curClip === name) return;
+  const clip = THREE.AnimationClip.findByName(u.clips, name)
+    || THREE.AnimationClip.findByName(u.clips, "idle") || u.clips[0];
+  if (!clip) return;
+  const next = u.mixer.clipAction(clip);
+  next.reset().setLoop(THREE.LoopRepeat, Infinity).fadeIn(0.3).play();
+  if (u.action && u.action !== next) u.action.fadeOut(0.3);
+  u.action = next; u.curClip = name;
+}
+
+// ── 角色：Kenney minifig（按状态播骨骼动画）+ 脚下身份光盘 ───────────────
 function makeFigure(boss) {
   const g = new THREE.Group();
-  const scale = boss ? 1.18 : 0.92;
-  const suit = boss ? 0x4a4f6a : 0x5d6580;
-  const body = meshRB(0.5, 0.66, 0.42, 0.16, mat(suit, { rough: 0.7 }));
-  body.position.y = 0.5; g.add(body);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.27, 20, 16), mat(0xf2c79c, { rough: 0.6 }));
-  head.position.y = 1.0; head.castShadow = true; g.add(head);
-  if (boss) { // 头儿小皇冠
-    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.12, 6),
-      mat(0xe8b54b, { rough: 0.4, metal: 0.6, emissive: 0xe8b54b, ei: 0.15 }));
-    crown.position.y = 1.26; crown.castShadow = true; g.add(crown);
+  const key = boss ? BOSS_CHAR : (CHAR_KEYS[Math.floor(Math.random() * CHAR_KEYS.length)] || BOSS_CHAR);
+  let mixer = null, clips = null;
+  if (MODELS[key]) {
+    const m = skClone(MODELS[key]);
+    m.scale.setScalar((boss ? CHAR_H * 1.12 : CHAR_H) / (MODELS[key].userData.size.y || 1));
+    g.add(m);
+    clips = CLIPS[key]; mixer = new THREE.AnimationMixer(m);
+  } else {   // 回退：圆角胶囊小人
+    const body = meshRB(0.5, 0.66, 0.42, 0.16, mat(boss ? 0x4a4f6a : 0x5d6580, { rough: 0.7 }));
+    body.position.y = 0.5; g.add(body);
   }
-  // 脚下身份光盘：主 Agent=荧光红 / 子代理=白（HDR + toneMapped:false，让 Bloom 晕成霓虹光圈）
+  // 脚下身份光盘：主 Agent=荧光红 / 子代理=白（HDR + toneMapped:false → Bloom 晕成霓虹光圈）
   const discMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.72, depthWrite: false, toneMapped: false });
   discMat.color.setRGB(...(boss ? [2.6, 0.16, 0.4] : [1.7, 1.7, 2.0]));
   const disc = new THREE.Mesh(new THREE.CircleGeometry(boss ? 0.66 : 0.52, 40), discMat);
   disc.rotation.x = -Math.PI / 2; disc.position.y = 0.06; g.add(disc);
-  g.scale.setScalar(scale);
-  g.userData = { disc, body, head, boss, phase: Math.random() * 6.28, state: "idle" };
+  g.userData = { disc, mixer, clips, boss, phase: Math.random() * 6.28, state: "idle", action: null, curClip: null };
   return g;
 }
 function makeMonster() {
@@ -321,37 +366,43 @@ function makeMonster() {
   return g;
 }
 
-// ── 一间办公室：地板 + 两面矮墙 + 桌屏 ───────────────────────────────
-// 窗屏材质提到模块级共享：applyWeather 夜间把它调成 Tokyo 霓虹冷光。
+// ── 一间办公室：地板 + 两面矮墙 + Kenney 工位（桌+椅+发光屏）────────────
+// 窗屏材质模块级共享：applyWeather 夜间调成 Tokyo 霓虹冷光。
 const screenMat = mat(0x16324a, { emissive: 0x2f9bd6, ei: 0.9 });
 function buildRoom(accent) {
   const g = new THREE.Group();
   const floor = meshRB(ROOM, 0.16, ROOM, 0.06, mat(accent, { rough: 0.9 }), false, true);
   floor.position.y = 0.08; g.add(floor);
-  // 矮墙在 -x / -z 两侧（默认相机看得进的背左角）
   const wallMat = mat(0xfbf7ef, { rough: 0.95 });
   const wz = meshRB(ROOM, WALL_H, 0.12, 0.04, wallMat);
   wz.position.set(0, WALL_H / 2 + 0.16, -ROOM / 2 + 0.06); g.add(wz);
   const wx = meshRB(0.12, WALL_H, ROOM, 0.04, wallMat);
   wx.position.set(-ROOM / 2 + 0.06, WALL_H / 2 + 0.16, 0); g.add(wx);
-  // 墙裙（accent 色腰线）
   const skirt = meshRB(ROOM, 0.1, 0.14, 0.02, mat(accent, { rough: 0.6 }));
   skirt.position.set(0, 0.5, -ROOM / 2 + 0.07); g.add(skirt);
-  // 沿墙摆几张桌子 + 发光屏
-  const deskMat = mat(0xc99a6b, { rough: 0.65 });
+  // 工位：Kenney desk + chairDesk + 发光屏(我们的 screenMat, 驱动 Tokyo 霓虹)
+  const fs = MODELS._fs || 1, FY = 0.16;
   const seats = [];
-  const spots = [[-ROOM / 2 + 0.9, -0.5], [-ROOM / 2 + 0.9, 0.7], [0.4, -ROOM / 2 + 0.9], [1.4, -ROOM / 2 + 0.9]];
-  spots.forEach(([x, z], i) => {
-    const desk = meshRB(0.95, 0.5, 0.6, 0.06, deskMat);
-    desk.position.set(x, 0.41, z);
-    const along = i < 2;   // 前两张贴左墙、后两张贴后墙朝向不同
-    desk.rotation.y = along ? Math.PI / 2 : 0;
-    g.add(desk);
-    const scr = meshRB(0.6, 0.42, 0.05, 0.02, screenMat);
-    scr.position.set(x + (along ? 0.18 : 0), 0.82, z + (along ? 0 : 0.18));
-    scr.rotation.y = desk.rotation.y;
-    g.add(scr);
-    seats.push({ x: x + (along ? 0.5 : 0), z: z + (along ? 0 : 0.5) });
+  // [x, z, ry] ry=朝向(贴左墙转 90° / 贴后墙不转)
+  const spots = [[-ROOM / 2 + 1.0, -0.6, Math.PI / 2], [-ROOM / 2 + 1.0, 0.8, Math.PI / 2],
+                 [0.4, -ROOM / 2 + 1.0, 0], [1.6, -ROOM / 2 + 1.0, 0]];
+  spots.forEach(([x, z, ry]) => {
+    if (MODELS.desk) {
+      const desk = MODELS.desk.clone(); desk.scale.setScalar(fs); desk.position.set(x, FY, z); desk.rotation.y = ry; g.add(desk);
+      const dh = (MODELS.desk.userData.size.y || 0.7) * fs;
+      const scr = meshRB(0.5, 0.34, 0.05, 0.02, screenMat);
+      scr.position.set(x, FY + dh + 0.2, z); scr.rotation.y = ry; g.add(scr);
+      if (MODELS.chairDesk) {
+        const ch = MODELS.chairDesk.clone(); ch.scale.setScalar(fs); ch.rotation.y = ry + Math.PI;
+        ch.position.set(x + (ry ? 0.7 : 0), FY, z + (ry ? 0 : 0.7)); g.add(ch);
+      }
+    } else {   // 回退：程序化桌
+      const desk = meshRB(0.95, 0.5, 0.6, 0.06, mat(0xc99a6b, { rough: 0.65 }));
+      desk.position.set(x, 0.41, z); desk.rotation.y = ry; g.add(desk);
+      const scr = meshRB(0.6, 0.42, 0.05, 0.02, screenMat);
+      scr.position.set(x, 0.82, z); scr.rotation.y = ry; g.add(scr);
+    }
+    seats.push({ x: x + (ry ? 1.0 : 0), z: z + (ry ? 0 : 1.0) });
   });
   g.userData = { seats };
   return g;
@@ -373,7 +424,8 @@ function cellPos(i) {
 }
 
 function setFigState(fig, state) {
-  fig.userData.state = state;   // 状态只驱动体态律动；身份靠脚下光盘红/白区分
+  fig.userData.state = state;             // 身份靠脚下光盘红/白；状态驱动骨骼动画
+  playClip(fig.userData, STATE_CLIP[state] || "idle");
 }
 
 function hashStr(s) { let h = 0; for (let i = 0; i < (s || "").length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; }
@@ -432,19 +484,10 @@ const bobFreq = (s) => s === "writing" ? 9 : s === "executing" || s === "working
 const clock = new THREE.Clock();
 let autoRotate = false;
 
-function animFig(fig, t) {
+function animFig(fig, t, dt) {
   const u = fig.userData;
-  // 身份光盘呼吸脉动（颜色固定：主红/子白）
-  u.disc.material.opacity = 0.5 + 0.32 * (0.5 + 0.5 * Math.sin(t * 3 + u.phase));
-  // 头/身随状态律动
-  const f = bobFreq(u.state);
-  const amp = u.state === "error" ? 0.05 : 0.035;
-  const bob = Math.sin(t * f + u.phase) * amp;
-  fig.position.y = 0.16 + Math.max(0, bob);
-  u.head.position.y = 1.0 + bob * 0.5;
-  // 工作态身体轻微前倾
-  const lean = (u.state === "writing" || u.state === "executing" || u.state === "working") ? 0.12 : 0;
-  fig.rotation.x = lean * (0.6 + 0.4 * Math.sin(t * f + u.phase));
+  if (u.mixer) u.mixer.update(dt);                  // 骨骼动画推进（idle/打字/摇头…）
+  u.disc.material.opacity = 0.5 + 0.32 * (0.5 + 0.5 * Math.sin(t * 3 + u.phase));   // 身份光盘呼吸
 }
 
 let lastT = 0;
@@ -452,8 +495,8 @@ function loop() {
   const t = clock.getElapsedTime();
   const dt = Math.min(0.05, t - lastT); lastT = t;
   for (const [, r] of rooms) {
-    animFig(r.fig, t);
-    r.emps.forEach((e) => animFig(e, t));
+    animFig(r.fig, t, dt);
+    r.emps.forEach((e) => animFig(e, t, dt));
     if (r.monster) {
       r.monster.userData.body.rotation.y = t * 1.2;
       r.monster.userData.body.position.y = 0.7 + Math.abs(Math.sin(t * 5)) * 0.12;
@@ -506,9 +549,12 @@ async function pollWeather() {
     if (SKY_OVERRIDE) applyWeather(SKY_OVERRIDE, TOD_OVERRIDE !== "night", "", null);  // 后端没起也能预览
   }
 }
-pollRooms(); pollWeather();
-setInterval(pollRooms, POLL_MS);
+pollWeather();
 setInterval(pollWeather, 300000);
+// 先预加载 Kenney 模型，再开始建房间（加载失败则回退程序化占位，不阻塞）
+preloadModels()
+  .catch((e) => { /* 模型加载失败：makeFigure/buildRoom 自动回退占位 */ })
+  .finally(() => { pollRooms(); setInterval(pollRooms, POLL_MS); });
 
 // ── UI 浮层 ───────────────────────────────────────────────────────────
 const legend = document.getElementById("legend");
