@@ -319,7 +319,10 @@ function prepModel(scene) {
 }
 async function preloadModels() {
   const loader = new GLTFLoader();
-  for (const f of ["desk", "chairDesk", "computerScreen"]) {
+  const furn = ["desk", "chairDesk", "computerScreen",            // 工位
+    "pottedPlant", "plantSmall1", "plantSmall2", "bookcaseOpen",  // 美式办公摆件
+    "loungeSofa", "sideTable", "lampRoundFloor", "rugRectangle", "trashcan"];
+  for (const f of furn) {
     const g = await loader.loadAsync(GLTF_BASE + f + ".glb"); MODELS[f] = prepModel(g.scene);
   }
   MODELS._fs = 1.3 / Math.max(0.001, MODELS.desk.userData.size.x);   // 家具统一缩放：desk 宽→1.3
@@ -460,6 +463,24 @@ function buildRoom(accent) {
     }
     seats.push({ x, z, face: Math.PI });   // 全员朝 -z
   });
+  // 美式办公摆件：角落/边缘点缀，避开中央工位群
+  const half = ROOM / 2;
+  const prop = (key, px, pz, ry = 0, sc = 1) => {
+    if (!MODELS[key]) return;
+    const p = MODELS[key].clone(); p.scale.setScalar(fs * sc); p.position.set(px, FY, pz); p.rotation.y = ry; g.add(p);
+  };
+  if (MODELS.rugRectangle) {                         // 地毯铺中央工位群下
+    const rug = MODELS.rugRectangle.clone();
+    rug.scale.set(fs * 2.8, fs, fs * 3.4); rug.position.set(0, FY + 0.015, -0.4); g.add(rug);
+  }
+  prop("bookcaseOpen", half - 0.7, -half + 0.55, 0);          // 书架靠后墙右角
+  prop("pottedPlant", -half + 0.6, half - 0.7, 0, 1.1);       // 绿植 前左角
+  prop("pottedPlant", half - 0.65, half - 0.7, 0, 1.1);       // 绿植 前右角
+  prop("plantSmall2", half - 0.7, -half + 1.7, 0, 1.1);       // 小绿植 右后
+  prop("loungeSofa", -half + 1.1, half - 1.3, -Math.PI / 2);  // 休息沙发 前左
+  prop("sideTable", -half + 1.1, half - 2.5, 0, 0.9);         // 边几
+  prop("lampRoundFloor", -half + 0.6, -half + 0.7, 0);        // 落地灯 后左角
+  prop("trashcan", 2.1, half - 1.1, 0, 0.85);                 // 垃圾桶
   g.userData = { seats, ledMat };
   return g;
 }
@@ -486,6 +507,27 @@ function setFigState(fig, state) {
 
 function hashStr(s) { let h = 0; for (let i = 0; i < (s || "").length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; }
 
+// 地面入口铭牌：会话名做成朝镜头一侧的地面地垫(半透明深底+浅字)，平铺融入地景，日夜都清晰
+function makeNamePlate(label) {
+  const cv = document.createElement("canvas"); cv.width = 512; cv.height = 144;
+  const g = cv.getContext("2d");
+  const r = 32, W = 512, H = 144;
+  g.fillStyle = "rgba(16,18,26,0.46)";
+  g.beginPath(); g.moveTo(r, 0);
+  g.arcTo(W, 0, W, H, r); g.arcTo(W, H, 0, H, r); g.arcTo(0, H, 0, 0, r); g.arcTo(0, 0, W, 0, r);
+  g.closePath(); g.fill();
+  g.font = "bold 64px -apple-system,'PingFang SC','Helvetica Neue',sans-serif";
+  g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillStyle = "#eef2ff"; g.fillText((label || "office").slice(0, 18), W / 2, H / 2 + 4);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const pl = new THREE.Mesh(new THREE.PlaneGeometry(2.7, 0.76),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+  pl.rotation.x = -Math.PI / 2; pl.rotation.z = Math.PI;     // 平铺地面 + 转正朝镜头可读
+  pl.position.set(0, 0.175, ROOM / 2 - 0.95);                // 朝镜头一侧的前缘
+  pl.renderOrder = 2;
+  return pl;
+}
+
 function syncRooms(list) {
   // 永不空楼：零会话给个占位总部
   if (!list.length) list = [{ sessionId: "__hq__", label: "总部 · 待命中", boss: { state: "idle" }, employees: [], placeholder: true }];
@@ -500,6 +542,7 @@ function syncRooms(list) {
       const group = new THREE.Group();
       const shell = buildRoom(accent);
       group.add(shell);
+      group.add(makeNamePlate(r.label));        // 地面入口铭牌=会话名
       const p = cellPos(i);
       group.position.set(p.x, 0, p.z);
       scene.add(group);
