@@ -670,18 +670,19 @@ const screenGlow = new THREE.MeshBasicMaterial({ toneMapped: false, side: THREE.
 screenGlow.color.setRGB(0.55, 1.5, 2.0);
 const SCREEN_GEO = new THREE.PlaneGeometry(0.34, 0.215);  // 贴显示器屏面的发光片(屏内尺寸,本地)
 // L 形 LED 灯管：颜色 = 主 Agent 状态（HDR 入 Bloom）
+// 仅 5 个状态(精简自原 8 个，避免眼花)，全部 HDR 荧光发光入 Bloom：
+//   进行中=荧光绿 / 待授权=荧光橙 / 待命中=白 / AUTOMODE=初音绿 / 出错了=荧光红
 const LED_COLOR = {
-  error: 0xff2d4f,        // 红
-  executing: 0x39c5bb, working: 0x39c5bb,   // 初音绿 = 进行中
-  thinking: 0x4aa8ff,     // 蓝 = 思考中
-  researching: 0xffffff, writing: 0xffffff,  // 白 = tool use
-  waiting: 0xffa33d,      // 橙 = 待授权
-  delegating: 0xbb9af7,   // 紫 = 派活(自定义)
-  idle: 0x6b7280,         // 暗灰 = 待命
-  automode: 0xffd23d,     // 黄 = automode 启用中
+  error: 0xff2a45,        // 荧光红 = 出错了
+  waiting: 0xff8c1a,      // 荧光橙 = 待授权
+  idle: 0xffffff,         // 白 = 待命中(正常发光)
+  automode: 0x39c5bb,     // 初音绿 = AUTOMODE
+  // 进行中(荧光绿)：所有"忙"状态合并 —— 思考/查阅/写/执行/派活 一律"进行中"
+  executing: 0x39ff6a, working: 0x39ff6a, thinking: 0x39ff6a,
+  researching: 0x39ff6a, writing: 0x39ff6a, delegating: 0x39ff6a,
 };
 function setLed(m, state) {
-  const c = new THREE.Color(LED_COLOR[state] || 0x9aa3b2);
+  const c = new THREE.Color(LED_COLOR[state] || 0x39ff6a);   // 未知状态按"进行中"绿兜底
   const b = LEDB > 0 ? LEDB : 4.2;                    // 霓虹辉光亮度(HDR 入 Bloom；?led= 可调)
   m.color.setRGB(c.r * b, c.g * b, c.b * b);
 }
@@ -1513,8 +1514,8 @@ preloadModels()
 // 顶部居中横排图例：主/子身份 + 墙顶 LED 状态(颜色对齐 LED_COLOR) 拼一行
 const legend = document.getElementById("legend");
 const LED_LEGEND = [
-  ["#39c5bb", "进行中"], ["#4aa8ff", "思考中"], ["#ffffff", "工具调用"], ["#ffa33d", "待授权"],
-  ["#bb9af7", "派活"], ["#ff2d4f", "出错"], ["#ffd23d", "automode"], ["#6b7280", "待命"],
+  ["#39ff6a", "进行中"], ["#ff8c1a", "待授权"], ["#ffffff", "待命中"],
+  ["#39c5bb", "AUTOMODE"], ["#ff2a45", "出错了"],
 ];
 legend.innerHTML =
   '<span class="it"><span class="dot" style="background:#ff2d4f;color:#ff2d4f"></span>👑 主 Agent</span>' +
