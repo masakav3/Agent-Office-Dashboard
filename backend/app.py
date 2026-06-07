@@ -2078,7 +2078,9 @@ cc_lock = threading.Lock()
 CC_EMPLOYEE_TTL = int(os.getenv("CC_EMPLOYEE_TTL", "300"))    # 员工无更新 5min 视为离场
 CC_ROOM_TTL = int(os.getenv("CC_ROOM_TTL", "7200"))          # 兜底上限
 CC_IDLE_TTL = int(os.getenv("CC_IDLE_TTL", "150"))           # 忙但久未更新 → 自动 idle(防僵尸卡工作态)
-CC_DEAD_TTL = int(os.getenv("CC_DEAD_TTL", "1800"))          # 久无活动 → 判定会话已死 → 关闭办公室(崩溃/强杀兜底)
+CC_DEAD_TTL = int(os.getenv("CC_DEAD_TTL", "14400"))         # 久无活动→判定会话已死(4h)。开着但空闲的窗口不发事件,
+                                                             # 故此值要大,否则空闲窗口会被误清(原 30min 太短)。干净关窗
+                                                             # 由 SessionEnd 立即移除; 本值仅作崩溃/硬杀兜底。整天开着可调更大(如 86400)
 CC_CLOSE_GRACE = int(os.getenv("CC_CLOSE_GRACE", "8"))       # 进入关闭后宽限(秒)，给前端走"下班离场"动画
 CC_BUSY = frozenset({"thinking", "researching", "writing", "executing", "delegating", "waiting"})
 # 防僵尸自动转 idle 的状态集：**不含 waiting** —— 停在权限框/通知是真的在等用户，

@@ -230,6 +230,8 @@ def build_op(data: dict) -> Optional[dict]:
             "automode": pm in ("acceptEdits", "bypassPermissions"),
             "channel": (os.environ.get("CLAUDE_OFFICE_CHANNEL") or "").strip()}   # 来源工具→主 agent 光环颜色
 
+    if event == "SessionStart":
+        return {**base, "type": "state", "state": "idle", "detail": "💺 就位，待命中"}  # 窗口一开即上板(不必等首条提问)
     if event == "UserPromptSubmit":
         return {**base, "type": "state", "state": "thinking", "detail": "🧠 思考中…"}
     if event == "PreToolUse":
