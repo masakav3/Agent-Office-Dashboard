@@ -749,6 +749,16 @@ function skirtRunnerPos(s) {
   if (s < 0.5) { const u = s / 0.5; return new THREE.Vector3(half + (wall - half) * u, sy, wall); }   // 沿 -z 墙色带
   const u = (s - 0.5) / 0.5; return new THREE.Vector3(wall, sy, wall + (half - wall) * u);             // 沿 -x 墙色带
 }
+// 墙面色带 + 流水块 = channel 光环同款色(任意角度辨识渠道)；cursor 黑核在墙上看不见→用其白描边色
+function setBandColor(skirtMat, runMat, channel) {
+  const halo = channelHalo(channel);
+  const c = (halo.rgb[0] + halo.rgb[1] + halo.rgb[2] < 0.6 && halo.outline) ? halo.outline : halo.rgb;
+  if (runMat) runMat.color.setRGB(c[0], c[1], c[2]);                       // 流水块:HDR 同光环色,入 Bloom
+  if (skirtMat) {                                                          // 哑光色带:归一化成 albedo
+    const mx = Math.max(c[0], c[1], c[2], 0.001);
+    skirtMat.color.setRGB(c[0] / mx * 0.92, c[1] / mx * 0.92, c[2] / mx * 0.92);
+  }
+}
 function buildRoom(accent) {
   const g = new THREE.Group();
   const floor = meshRB(ROOM, 0.16, ROOM, 0.06, mat(accent, { rough: 0.9 }), false, true);
@@ -834,7 +844,7 @@ function buildRoom(accent) {
     }
     g.add(bc);
   }
-  g.userData = { seats, ledMat, bandRunner };
+  g.userData = { seats, ledMat, bandRunner, skirtMat, runMat };
   return g;
 }
 
@@ -1446,7 +1456,7 @@ function syncRooms(list) {
       fig.rotation.y = bseat.face || 0;          // 朝向显示器
       group.add(fig);
       initWalker(fig, bseat, bseat.face || 0, p, true);   // 主 agent 走动状态 + 房腿路径(seat→中庭口)
-      rooms.set(r.sessionId, { group, fig, emps: [], monster: null, seats: shell.userData.seats, ledMat: shell.userData.ledMat, bandRunner: shell.userData.bandRunner, runPhase: Math.random(), accent, idx: i, p });
+      rooms.set(r.sessionId, { group, fig, emps: [], monster: null, seats: shell.userData.seats, ledMat: shell.userData.ledMat, bandRunner: shell.userData.bandRunner, skirtMat: shell.userData.skirtMat, runMat: shell.userData.runMat, runPhase: Math.random(), accent, idx: i, p });
       if (DBG || PATHS) {                                  // 画该房 boss 房腿 + 房内障碍圈(dbg 或 paths)
         drawWaypoints(dbgPathGroup, fig.userData.roomLegW.map((pt) => toLocalXZ(pt, p)), DBG_LINE[i % DBG_LINE.length]);
         drawObstacleRings(dbgPathGroup, obsToWorld(ROOM_OBS, p), 0.32);
@@ -1464,6 +1474,7 @@ function syncRooms(list) {
       if (DBG) room.ledMat.color.setRGB(...DBG_LINE[(room.idx ?? 0) % DBG_LINE.length]);   // 调试:外墙线条按房间序固定上色(盖过状态色)
       else setLed(room.ledMat, r.automode ? "automode" : bossState);                       // L形LED=主Agent状态(automode优先黄)
     }
+    if (room.runMat) setBandColor(room.skirtMat, room.runMat, r.channel);   // 墙面色带+流水块=channel 光环同款色(任意角度辨识渠道)
     const want = Math.min((r.employees || []).length, room.seats.length - 1);   // 主位占 seats[0]
     while (room.emps.length < want) {
       const e = makeFigure(false);
@@ -1575,7 +1586,7 @@ function loop() {
     animFig(r.fig, t, dt);
     r.emps.forEach((e) => animFig(e, t, dt));
     if (r.monster && r.monster.userData.tick) r.monster.userData.tick(t, dt);   // 机器人抖动 + 冒烟 + 火花
-    if (r.bandRunner) { r.runPhase = (r.runPhase + dt * 0.35) % 1; r.bandRunner.position.copy(skirtRunnerPos(r.runPhase)); }   // 流水灯块沿墙面色带滚动
+    if (r.bandRunner) { r.runPhase = (r.runPhase + dt * 0.14) % 1; r.bandRunner.position.copy(skirtRunnerPos(r.runPhase)); }   // 流水灯块沿墙面色带滚动(慢速)
   }
   stepTv(dt, t);                                        // 中庭电视像素屏动画
   stepWeather(dt, t);                                   // 雨雪下落
