@@ -70,6 +70,31 @@ printf '{"hook_event_name":"PreToolUse","tool_name":"Edit","session_id":"demo","
 
 完整的起停、数据流、踩坑记录见 **[RUNBOOK.md](RUNBOOK.md)**。
 
+## 多 Agent 接入（内网 · 各类工具）
+
+看板不只看自己——**全公司同一内网的 agent 都能上同一块板**。每个会话一间办公室，
+来源工具决定背后光环色，状态驱动墙顶 LED（进行中绿/待授权橙/待命白/AUTOMODE 初音绿/出错红）。
+
+**Claude Code 一键接入**（在仓库目录内）：
+
+```bash
+python3 tools/office-join/install.py \
+  --label "你的名字" --channel claude \
+  --url http://10.31.3.100:19000     # 本机用 127.0.0.1；内网填后端机的局域网 IP
+  # 后端开了鉴权再加 --token
+```
+
+幂等可重跑、写前自动备份、`--uninstall` 一键撤销。这个 agent 也能自己读
+[`tools/office-join/SKILL.md`](tools/office-join/SKILL.md) 学着接入。
+
+**其它工具**：生态已收敛到 Claude Code 的 hook 模型，**同一个 `hooks/cc_state_push.py` 一份通吃**——
+Cursor / Codex / Continue / Copilot 直接复用，Gemini / Cline / Hermes 由 hook 自动归一事件名，
+Antigravity / OpenClaw 走 webhook 直推 `/cc/push`。各工具配置位置、通用 HTTP 契约、channel 配色表见
+[`tools/office-join/README.md`](tools/office-join/README.md)。
+
+接入用的环境变量（`CLAUDE_OFFICE_URL/LABEL/CHANNEL/TOKEN`）、内网放行、轻量鉴权（`CC_PUSH_TOKEN`）
+详见 [RUNBOOK.md](RUNBOOK.md) 第八节与 [docs/debug-parameters.md](docs/debug-parameters.md) 第七/八节。
+
 ## 技术栈
 
 - 后端：Python 3 + Flask（纯文件状态，零数据库）
