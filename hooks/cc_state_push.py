@@ -26,6 +26,8 @@ claude-office · Claude Code 状态转发钩子（Phase 2：多办公室）
   CLAUDE_OFFICE_LABEL  办公室名牌(agent 名称)。设了就用它，否则退回 cwd 目录名。
                         让每个接入方在自己的 settings.json 里给自己起名：
                           CLAUDE_OFFICE_LABEL="王五的Claude" python3 .../hooks/cc_state_push.py
+  CLAUDE_OFFICE_TOKEN  共享接入口令(可选)。后端设了 CC_PUSH_TOKEN 时必须填且匹配，
+                        否则 /cc/push 返回 401；后端没设则填不填都行。防内网伪造/乱推。
   CLAUDE_OFFICE_DEBUG  设为 1 时把每次事件追加到 /tmp/claude-office-hook.log
   CLAUDE_OFFICE_CHANNEL 来源工具名(claude/openclaw/hermes/codex/gemini/kimi/cursor/trae/vscode…)
                         → 看板里主 agent 背后光环按此上色，未设则默认粉色。
@@ -198,10 +200,14 @@ def push(op: dict) -> None:
     """POST /cc/push；超时短、出错全吞。"""
     base = os.environ.get("CLAUDE_OFFICE_URL", DEFAULT_URL).rstrip("/")
     payload = json.dumps(op).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    token = (os.environ.get("CLAUDE_OFFICE_TOKEN") or "").strip()
+    if token:                                  # 后端设了 CC_PUSH_TOKEN 时必带; 后端没设则带了也无妨
+        headers["X-Office-Token"] = token
     req = urllib.request.Request(
         f"{base}{PUSH_PATH}",
         data=payload,
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method="POST",
     )
     urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_SECONDS).read()

@@ -98,7 +98,7 @@ cd ~/Documents/GitHub/claude-office
 ## 八、Claude Code Hook 接入（Phase 1）
 
 转发器：`hooks/cc_state_push.py`（纯标准库，零依赖，出错静默，永不阻塞工具）。
-读 stdin 的 hook 事件 JSON，按 `(hook_event_name, tool_name)` 映射成状态，POST 到 `/set_state`。
+读 stdin 的 hook 事件 JSON，按 `(hook_event_name, tool_name)` 映射成状态，POST 到 `/cc/push`。
 
 事件 → 状态映射：
 
@@ -114,7 +114,18 @@ cd ~/Documents/GitHub/claude-office
 | `Stop` | idle | ✅ 完成，待命中 |
 | `SessionEnd` | idle | 💤 会话结束 |
 
-环境变量：`CLAUDE_OFFICE_URL`（默认 `http://127.0.0.1:19000`）、`CLAUDE_OFFICE_DEBUG=1`（写 `/tmp/claude-office-hook.log`）。
+环境变量（转发器 `cc_state_push.py` 读取）：
+
+| 变量 | 作用 | 默认 |
+|---|---|---|
+| `CLAUDE_OFFICE_URL` | 后端地址。内网接入填起后端那台机的局域网 IP，如 `http://10.31.3.100:19000` | `http://127.0.0.1:19000` |
+| `CLAUDE_OFFICE_LABEL` | 办公室名牌（agent 名称）。各接入方在自己 settings.json 里起名 | 空 → 退回 cwd 目录名 |
+| `CLAUDE_OFFICE_CHANNEL` | 来源工具（claude/openclaw/hermes/codex/gemini/kimi/cursor/trae/vscode…）→ 主 agent 光环色 | 空 → 默认粉环 |
+| `CLAUDE_OFFICE_TOKEN` | 共享接入口令。后端设了 `CC_PUSH_TOKEN` 时必填且匹配，否则 401；后端没设则可不填 | 空 |
+| `CLAUDE_OFFICE_DEBUG` | `=1` 时把每次事件追加到 `/tmp/claude-office-hook.log` | 关 |
+
+后端轻量鉴权：起后端时设 `CC_PUSH_TOKEN=<口令>`（写进 `.env`，`run.sh` 自动加载）即开启 `/cc/push` 校验；
+留空＝开放模式（本机/可信内网，与历史行为一致）。读取 `/cc/rooms`（看板）始终开放，只防伪造**写入**。
 
 已在 `~/.claude/settings.json` 的这些事件**追加**（不覆盖既有 AhaKey / token 上报 / skill-tracker）：
 `UserPromptSubmit / PreToolUse / PostToolUse / Stop / SessionEnd / PermissionRequest / Notification`。
@@ -135,6 +146,51 @@ os.replace(tmp, SET); print("已移除本项目 hook")
 PY
 ```
 或直接用备份：`cp ~/.claude/settings.json.bak-claude-office-* ~/.claude/settings.json`
+
+### 多机内网接入（把看板共享给团队）
+
+让别的同事 / 别的机器上的 agent 也上同一块看板。前提：和起后端那台机在**同一内网**。
+
+1. **起后端那台机**（host）：
+   - 查内网 IP：`ipconfig getifaddr en0`（本机当前 = `10.31.3.100`）。后端已 `host=0.0.0.0`，内网可达。
+   - 要鉴权就 `.env` 里加 `CC_PUSH_TOKEN=<给团队的口令>` 再重启后端；不要就跳过（开放模式）。
+   - macOS 防火墙若开着，放行 19000（系统设置→网络→防火墙，或临时关）。
+2. **每个接入方**（teammate）：
+   - 把单文件 `hooks/cc_state_push.py` 拷到自己机器（纯标准库、零依赖，比如放 `~/.claude/cc_state_push.py`）。
+   - 在自己 `~/.claude/settings.json` 顶层加 `env` + 7 个事件的 hook：
+
+```jsonc
+{
+  "env": {
+    "CLAUDE_OFFICE_URL": "http://10.31.3.100:19000",
+    "CLAUDE_OFFICE_LABEL": "韩梅梅",          // ← 你的名字，看板名牌
+    "CLAUDE_OFFICE_CHANNEL": "claude",        // ← 你用的工具，决定光环色
+    "CLAUDE_OFFICE_TOKEN": "<口令>"           // ← 后端设了 CC_PUSH_TOKEN 才需要
+  },
+  "hooks": {
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "python3 \"$HOME/.claude/cc_state_push.py\"" }] }],
+    "PreToolUse":        [{ "hooks": [{ "type": "command", "command": "python3 \"$HOME/.claude/cc_state_push.py\"" }] }],
+    "PostToolUse":       [{ "hooks": [{ "type": "command", "command": "python3 \"$HOME/.claude/cc_state_push.py\"" }] }],
+    "Stop":              [{ "hooks": [{ "type": "command", "command": "python3 \"$HOME/.claude/cc_state_push.py\"" }] }],
+    "SessionEnd":        [{ "hooks": [{ "type": "command", "command": "python3 \"$HOME/.claude/cc_state_push.py\"" }] }],
+    "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "python3 \"$HOME/.claude/cc_state_push.py\"" }] }],
+    "Notification":      [{ "hooks": [{ "type": "command", "command": "python3 \"$HOME/.claude/cc_state_push.py\"" }] }]
+  }
+}
+```
+
+> `env` 块是 Claude Code 标准的 per-session 注入，hook 子进程继承；万一某版本不生效，把三/四个变量前置到每条 `command`（`CLAUDE_OFFICE_URL=... CLAUDE_OFFICE_LABEL=... python3 ...`），此形式已实测可用。
+
+**自测一行**（在 teammate 机器上，把 IP/口令换成实际值，看 host 看板是否冒出 `远程冒烟`）：
+
+```bash
+CLAUDE_OFFICE_URL=http://10.31.3.100:19000 CLAUDE_OFFICE_LABEL=远程冒烟 CLAUDE_OFFICE_CHANNEL=claude CLAUDE_OFFICE_TOKEN=<口令> \
+  python3 hooks/cc_state_push.py <<'EOF'
+{"hook_event_name":"PreToolUse","tool_name":"Edit","session_id":"smoke-remote","cwd":"/x/demo"}
+EOF
+```
+
+> 非 Claude Code 工具（cursor/trae 等事件 schema 不同的）接入方式见 [docs/debug-parameters.md](docs/debug-parameters.md)。
 
 ## 九、多办公室数据模型（Phase 2）
 

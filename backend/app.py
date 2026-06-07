@@ -3,6 +3,7 @@
 
 from flask import Flask, jsonify, send_from_directory, make_response, request, session
 from datetime import datetime, timedelta
+import hmac
 import json
 import os
 import random
@@ -2081,6 +2082,9 @@ CC_DEAD_TTL = int(os.getenv("CC_DEAD_TTL", "1800"))          # 久无活动 → 
 CC_CLOSE_GRACE = int(os.getenv("CC_CLOSE_GRACE", "8"))       # 进入关闭后宽限(秒)，给前端走"下班离场"动画
 CC_BUSY = frozenset({"thinking", "researching", "writing", "executing", "delegating", "waiting"})
 CC_MONSTER_TTL = int(os.getenv("CC_MONSTER_TTL", "25"))      # 出错后怪兽在办公室停留(秒)
+# 轻量鉴权: 设了 CC_PUSH_TOKEN 则 /cc/push 必须带匹配 token(X-Office-Token 头或 body.token);
+# 留空=开放模式(本机/可信内网, 与历史行为一致, 零破坏)。像 WiFi 密码一样发给接入的同事。
+CC_PUSH_TOKEN = (os.getenv("CC_PUSH_TOKEN") or "").strip()
 CC_VALID_STATES = frozenset({
     "idle", "thinking", "researching", "writing", "executing",
     "delegating", "waiting", "error", "sleeping",
@@ -2153,6 +2157,10 @@ def cc_push():
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
             return jsonify({"ok": False, "msg": "invalid json"}), 400
+        if CC_PUSH_TOKEN:                                    # 轻量鉴权: 仅在配置了 token 时校验, 否则开放
+            supplied = (request.headers.get("X-Office-Token") or data.get("token") or "").strip()
+            if not hmac.compare_digest(supplied, CC_PUSH_TOKEN):
+                return jsonify({"ok": False, "msg": "unauthorized"}), 401
         op = (data.get("type") or "state").strip()
         session_id = (data.get("sessionId") or "").strip()
         if not session_id:
