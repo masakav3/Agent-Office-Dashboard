@@ -240,3 +240,48 @@ CLAUDE_OFFICE_CHANNEL=claude python3 ~/Documents/GitHub/claude-office/hooks/cc_s
 ```
 
 未设 `CLAUDE_OFFICE_CHANNEL` 时主 agent 光环默认粉色。颜色映射在 `office3d.js` 的 `channelHalo()` 里，新增工具改那里即可。
+
+---
+
+## 八、非 Claude Code 工具接入（多 agent 收编）
+
+好消息：AI 编码工具生态**已收敛到 Claude Code 的 hook 模型**——`hook_event_name` / `tool_name` / `session_id` / `cwd` + stdin JSON 几乎成事实标准。所以**同一个转发器 `hooks/cc_state_push.py` 一份通吃**，多数工具只需在各自配置里把它注册成 hook 命令、带上 `CLAUDE_OFFICE_*` 环境变量即可。
+
+转发器内置**事件名/字段归一**（`canon_event` / `canon_session` / `canon_tool`）：CC 原生直接认；Gemini 的 `BeforeTool`/`AfterTool`、Cline 的 `hookName`/`taskId`、Hermes 的 `pre_tool_call`/`agent:*` 都会被映射回规范 CC 事件名。
+
+### 分层接入
+
+| 层 | 工具 | hook 能力 | 配置位置 | 接入方式 |
+|----|------|-----------|----------|----------|
+| **T1 直接复用** | **Cursor** | 同字段同事件名（官方"匹配 Claude Code 行为"） | `.cursor/hooks.json` / `~/.cursor/hooks.json` | 注册本转发器即可，零改动 |
+| | **Codex CLI** | 同字段同事件名 | `~/.codex/hooks.json` 或 `config.toml` `[hooks]` | 同上 |
+| | **Continue.dev**(`cn`) | 同事件名，且**直接读 `.claude/settings.json`** | `.continue/settings.json` / `.claude/settings.json` | 复用你现成的 CC 配置 |
+| | **Copilot agent**(VS Code) | CC 形（驼峰/下划线双认） | `.github/hooks/*.json` / `.copilot/settings.json` | 注册本转发器 |
+| **T2 已归一** | **Gemini CLI** | stdin 同形，事件名 `BeforeTool`/`AfterTool`/`BeforeAgent`/`AfterAgent` | `.gemini/settings.json` `hooks` | 转发器已映射，直接用 |
+| | **Cline**(VS Code) | shell-only（不能直接 HTTP），字段 `hookName`/`taskId` | `<config>/hooks/` 脚本按事件名命名 | 脚本里调 `python3 .../cc_state_push.py`（转发器替它发 HTTP） |
+| | **Hermes**(NousResearch) | shell hook，事件 `pre_tool_call`/`agent:*` | `~/.hermes/config.yaml` | 转发器已映射，直接用 |
+| **T3 自有 schema** | **Antigravity** / **OpenClaw** | 有 webhook / SDK，但 schema 自定义 | `.agents/hooks.json` / OpenClaw webhooks | 走 webhook **直推 `/cc/push`**（见下方通用契约），或 SDK 装饰器里 POST |
+| **T4 无 hook** | **Trae** / **Roo Code** | 无生命周期 hook | — | 轮询 trajectory/日志文件 或 用 MCP server 垫一层后再推（暂未内置） |
+
+> 每个接入方按 RUNBOOK.md §八「多机内网接入」的 settings.json 块设 `CLAUDE_OFFICE_URL/LABEL/CHANNEL/TOKEN`，把命令换成各工具的配置格式。`CLAUDE_OFFICE_CHANNEL` 决定光环色（见 §七）。
+
+### 通用契约（任意 webhook / 脚本直推）
+
+凡能发 HTTP 的（Antigravity/OpenClaw webhook、CI、自写脚本），直接 `POST /cc/push`：
+
+```bash
+curl -X POST http://10.31.3.100:19000/cc/push \
+  -H 'Content-Type: application/json' \
+  -H 'X-Office-Token: <口令，后端设了 CC_PUSH_TOKEN 才需要>' \
+  -d '{"type":"state","sessionId":"my-agent-1","room":"我的Agent","channel":"openclaw","state":"writing","detail":"✍️ 干活中"}'
+```
+
+字段：`type`(state/delegate/subagent_done/session_end)、`sessionId`(必填，定位办公室)、`room`(名牌)、`channel`(光环色)、`state`(idle/thinking/researching/writing/executing/delegating/waiting/error)、`detail`(可选文案)。`delegate` 额外带 `name`(子代理名)。
+
+### 实测归一（本地验证过的 payload）
+
+```bash
+# Cursor(conversation_id) / Gemini(BeforeTool) / Cline(hookName+taskId) / Hermes(pre_tool_call) 均正确上板
+echo '{"hookName":"PreToolUse","tool_name":"Read","taskId":"cline-x","cwd":"/x"}' \
+  | CLAUDE_OFFICE_LABEL=Cline用户 CLAUDE_OFFICE_CHANNEL=cline python3 hooks/cc_state_push.py
+```

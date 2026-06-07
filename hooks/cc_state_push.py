@@ -106,13 +106,57 @@ def base_label(cwd: str) -> str:
     return os.path.basename(cwd) or cwd or "office"
 
 
+# ── 非 Claude Code 工具的事件名/字段归一 ──────────────────────────────────
+# 生态已收敛到 CC hook 模型: Cursor/Codex/Copilot/Continue 直接同形(同字段同事件名);
+# Gemini/Cline/Hermes 的 stdin 同形但事件名不同, 在此映射回规范 CC 事件名 → 一份 hook 通吃。
+# (Antigravity/OpenClaw 自有 schema, 走各自 webhook 直推 /cc/push, 见 docs/debug-parameters.md)
+_EVENT_ALIASES = {
+    # Gemini CLI: BeforeTool/AfterTool/BeforeAgent/AfterAgent
+    "beforetool": "PreToolUse", "aftertool": "PostToolUse",
+    "beforeagent": "UserPromptSubmit", "afteragent": "Stop",
+    # Hermes: pre_tool_call/post_tool_call/agent:start/agent:end
+    "pre_tool_call": "PreToolUse", "post_tool_call": "PostToolUse",
+    "agent:start": "UserPromptSubmit", "agent:end": "Stop",
+    # 规范名本身(大小写/下划线兜底)
+    "pretooluse": "PreToolUse", "posttooluse": "PostToolUse",
+    "userpromptsubmit": "UserPromptSubmit", "stop": "Stop",
+    "sessionend": "SessionEnd", "subagentstop": "SubagentStop",
+    "notification": "Notification", "permissionrequest": "PermissionRequest",
+}
+
+
+def canon_event(data: dict) -> str:
+    """规范事件名：CC 的 hook_event_name / Cline 的 hookName / 通用 event，经别名表归一。"""
+    raw = (data.get("hook_event_name") or data.get("hookName")
+           or data.get("hook_event") or data.get("event") or "").strip()
+    return _EVENT_ALIASES.get(raw.lower(), raw)
+
+
+def canon_session(data: dict) -> str:
+    """会话 id：CC session_id / Cline taskId / Cursor conversation_id 等都认。"""
+    for k in ("session_id", "sessionId", "taskId", "conversation_id", "conversationId"):
+        v = data.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return ""
+
+
+def canon_tool(data: dict) -> str:
+    """工具名：tool_name / toolName / tool 都认。"""
+    for k in ("tool_name", "toolName", "tool"):
+        v = data.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return ""
+
+
 def build_op(data: dict) -> Optional[dict]:
     """把一次 hook 事件映射成 /cc/push 的 op；None 表示忽略。"""
-    session_id = (data.get("session_id") or "").strip()
+    session_id = canon_session(data)
     if not session_id:
         return None  # 无法归属到办公室，跳过
-    event = (data.get("hook_event_name") or "").strip()
-    tool_name = (data.get("tool_name") or "").strip()
+    event = canon_event(data)        # CC 原生 + Gemini/Cline/Hermes 事件名归一
+    tool_name = canon_tool(data)
     # automode：Claude Code 自动接受编辑 / 绕过权限模式 → 看板亮黄灯
     pm = (data.get("permission_mode") or data.get("permissionMode") or "").strip()
     base = {"sessionId": session_id, "room": base_label(data.get("cwd") or ""),
