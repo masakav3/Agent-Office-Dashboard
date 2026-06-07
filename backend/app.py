@@ -2297,7 +2297,7 @@ def office_page():
 # ============================================================================
 import urllib.request as _urlreq
 
-_weather_cache = {"data": None, "at": None}
+_weather_cache = {}     # 按地点 key 缓存：{key: {"data":.., "at":..}}（key="ip" 或 "lat,lon"）
 WEATHER_TTL = 600
 WEATHER_DEFAULT = {"sky": "clear", "isDay": True, "temp": None, "code": 0, "city": "Office"}
 
@@ -2330,20 +2330,21 @@ def _http_json(url, timeout):
         return json.loads(r.read().decode("utf-8"))
 
 
-def _fetch_weather():
-    lat, lon, city = 39.90, 116.40, "Office"     # 兜底：北京
-    for u in ("http://ip-api.com/json/?fields=lat,lon,city",
-              "https://ipapi.co/json/"):
-        try:
-            g = _http_json(u, 3)
-            la = g.get("lat") if g.get("lat") is not None else g.get("latitude")
-            lo = g.get("lon") if g.get("lon") is not None else g.get("longitude")
-            if la is not None and lo is not None:
-                lat, lon, city = la, lo, (g.get("city") or city)
-                break
-        except Exception:
-            continue
-    out = dict(WEATHER_DEFAULT, city=city)
+def _fetch_weather(lat=None, lon=None, city=None):
+    if lat is None or lon is None:               # 未指定坐标 → IP 定位兜底(北京)
+        lat, lon, city = 39.90, 116.40, "Office"
+        for u in ("http://ip-api.com/json/?fields=lat,lon,city",
+                  "https://ipapi.co/json/"):
+            try:
+                g = _http_json(u, 3)
+                la = g.get("lat") if g.get("lat") is not None else g.get("latitude")
+                lo = g.get("lon") if g.get("lon") is not None else g.get("longitude")
+                if la is not None and lo is not None:
+                    lat, lon, city = la, lo, (g.get("city") or city)
+                    break
+            except Exception:
+                continue
+    out = dict(WEATHER_DEFAULT, city=(city or "Office"))
     try:
         d = _http_json(
             f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
@@ -2361,14 +2362,45 @@ def _fetch_weather():
 def cc_weather():
     try:
         now = datetime.now()
-        stale = (_weather_cache["at"] is None or
-                 (now - _weather_cache["at"]).total_seconds() > WEATHER_TTL)
-        if stale:
-            _weather_cache["data"] = _fetch_weather()
-            _weather_cache["at"] = now
-        return jsonify(_weather_cache["data"] or WEATHER_DEFAULT)
+        flat = flon = None
+        try:                                          # 用户自定义坐标(校验范围)；缺/非法则回退 IP
+            la, lo = request.args.get("lat"), request.args.get("lon")
+            if la is not None and lo is not None:
+                flat, flon = float(la), float(lo)
+                if not (-90 <= flat <= 90 and -180 <= flon <= 180):
+                    flat = flon = None
+        except Exception:
+            flat = flon = None
+        city = (request.args.get("city") or "").strip()[:40] or None
+        key = f"{flat:.3f},{flon:.3f}" if flat is not None else "ip"
+        ent = _weather_cache.get(key)
+        if ent is None or (now - ent["at"]).total_seconds() > WEATHER_TTL:
+            data = _fetch_weather(flat, flon, city if flat is not None else None)
+            ent = {"data": data, "at": now}
+            _weather_cache[key] = ent
+        return jsonify(ent["data"] or WEATHER_DEFAULT)
     except Exception as e:
         return jsonify(dict(WEATHER_DEFAULT, msg=str(e)))
+
+
+@app.route("/cc/geocode", methods=["GET"])
+def cc_geocode():
+    """地名搜索代理(Open-Meteo geocoding)：前端自动补全用，返回真实地点+坐标，避免拼错/不存在。"""
+    from urllib.parse import quote
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return jsonify({"results": []})
+    try:
+        url = ("https://geocoding-api.open-meteo.com/v1/search?name="
+               + quote(q) + "&count=8&language=zh&format=json")
+        d = _http_json(url, 4)
+        out = [{"name": r.get("name"), "country": r.get("country"),
+                "admin1": r.get("admin1"), "lat": r.get("latitude"),
+                "lon": r.get("longitude"), "cc": r.get("country_code")}
+               for r in (d.get("results") or [])[:8]]
+        return jsonify({"results": out})
+    except Exception as e:
+        return jsonify({"results": [], "msg": str(e)})
 
 
 # ============================================================================

@@ -189,6 +189,9 @@ document.body.appendChild(flashEl);
 let stormFlash = false, flashCd = 3, flashDecay = 0;
 const skyBadge = document.createElement("div");
 skyBadge.className = "ui weather";
+skyBadge.style.cursor = "pointer";
+skyBadge.title = "点击设置显示的城市 / 地区";
+skyBadge.addEventListener("click", () => openLocPicker());   // 点天气卡 → 自定义城市/地区
 document.body.appendChild(skyBadge);
 
 let curSky = "", curTod = "";
@@ -240,7 +243,8 @@ function applyWeather(sky, isDay, city, temp) {
   skyBadge.innerHTML =
     `<span class="wic">${ic}</span>` +
     `<span class="wtx"><b>${city || "Office"}${temp != null ? "　" + Math.round(temp) + "°" : ""}</b>` +
-    `<span>${cond} · ${tod === "night" ? "🌙 夜间" : "☀ 白天"} · ${SEASON_ICON}</span></span>`;
+    `<span>${cond} · ${tod === "night" ? "🌙 夜间" : "☀ 白天"} · ${SEASON_ICON}</span></span>` +
+    `<span class="wpin" style="margin-left:2px;opacity:.55;font-size:12px">📍</span>`;
 }
 
 // 调试参数（URL query，便于实时拨参对比）：
@@ -1632,9 +1636,54 @@ async function pollRooms() {
       (data.net ? ` · DGX ${data.net.ok ? "🟢" : "⛔"}` : "");
   } catch (e) { /* 后端没起就静默重试 */ }
 }
+// ── 自定义城市/地区(地名搜索自动补全 + localStorage 持久化，替代不靠谱的 IP 定位) ──
+const LOC_KEY = "cc_office_loc";
+function savedLoc() { try { return JSON.parse(localStorage.getItem(LOC_KEY) || "null"); } catch (e) { return null; } }
+function _esc(s) { return String(s == null ? "" : s).replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c])); }
+let _locPop = null, _locTimer = null;
+function openLocPicker() {
+  if (_locPop) { _locPop.remove(); _locPop = null; return; }       // 再点一次关闭
+  const pop = document.createElement("div"); _locPop = pop;
+  pop.style.cssText = "position:fixed;top:64px;right:26px;z-index:30;width:248px;background:rgba(20,22,34,0.94);" +
+    "border-radius:12px;padding:10px;box-shadow:0 10px 34px rgba(0,0,0,.45);color:#eef2ff;font-size:13px;backdrop-filter:blur(8px)";
+  pop.innerHTML = '<input id="locInput" placeholder="搜索城市 / 地区…(如 Tokyo、上海)" autocomplete="off" ' +
+    'style="width:100%;box-sizing:border-box;padding:7px 9px;border-radius:8px;border:1px solid #3a3f55;background:#11131f;color:#eef2ff;outline:none;font-size:13px">' +
+    '<div id="locResults" style="margin-top:6px;max-height:250px;overflow:auto"></div>';
+  document.body.appendChild(pop);
+  const inp = pop.querySelector("#locInput"), res = pop.querySelector("#locResults");
+  const close = () => { if (_locPop) { _locPop.remove(); _locPop = null; } };
+  const row = (html, onclick) => { const d = document.createElement("div"); d.innerHTML = html;
+    d.style.cssText = "padding:7px 8px;border-radius:7px;cursor:pointer";
+    d.onmouseenter = () => (d.style.background = "rgba(255,255,255,.08)"); d.onmouseleave = () => (d.style.background = "");
+    d.onclick = onclick; return d; };
+  const showDefault = () => { res.innerHTML = "";
+    res.appendChild(row("🌐 用 IP 自动定位（默认）", () => { localStorage.removeItem(LOC_KEY); close(); pollWeather(); }));
+    const L = savedLoc(); if (L) res.appendChild(row(`✅ 当前：<b>${_esc(L.name)}</b>${L.country ? " · " + _esc(L.country) : ""}`, () => {})); };
+  showDefault(); inp.focus();
+  inp.addEventListener("input", () => {
+    clearTimeout(_locTimer); const q = inp.value.trim();
+    if (!q) { showDefault(); return; }
+    _locTimer = setTimeout(async () => {
+      try {
+        const d = await (await fetch("/cc/geocode?q=" + encodeURIComponent(q), { cache: "no-store" })).json();
+        res.innerHTML = "";
+        if (!d.results || !d.results.length) { res.appendChild(row("<span style='opacity:.6'>无匹配，换个关键词</span>", () => {})); return; }
+        for (const r of d.results) {
+          const label = [r.name, r.admin1, r.country].filter(Boolean).join(", ");
+          res.appendChild(row("📍 " + _esc(label), () => {
+            localStorage.setItem(LOC_KEY, JSON.stringify({ name: r.name, country: r.country, lat: r.lat, lon: r.lon }));
+            close(); pollWeather();
+          }));
+        }
+      } catch (e) { res.innerHTML = "<div style='padding:7px;opacity:.6'>搜索失败，检查后端/网络</div>"; }
+    }, 280);
+  });
+}
 async function pollWeather() {
   try {
-    const w = await (await fetch("/cc/weather", { cache: "no-store" })).json();
+    const L = savedLoc();
+    const url = L ? `/cc/weather?lat=${L.lat}&lon=${L.lon}&city=${encodeURIComponent(L.name || "")}` : "/cc/weather";
+    const w = await (await fetch(url, { cache: "no-store" })).json();
     const sky = SKY_OVERRIDE || (w && w.sky) || "clear";
     const isDay = TOD_OVERRIDE ? TOD_OVERRIDE !== "night" : (w ? w.isDay : true);
     applyWeather(sky, isDay, w && w.city, w && w.temp);
