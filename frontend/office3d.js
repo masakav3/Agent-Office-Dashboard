@@ -974,8 +974,8 @@ function initWalker(fig, seatLocal, face, p, isBoss) {
 // 低分辨率 canvas + NearestFilter = 像素感；MeshBasicMaterial(toneMapped:false)+color>1 → 入 Bloom 发光。
 // 点击电视屏(射线命中 tvScreenMesh)循环切换；loop 里 ~12fps 重绘 canvas 让画面动起来。
 const TV_W = 168, TV_H = 105;
-let tvScreenMesh = null, tvCtx = null, tvTex = null, tvScene = 0, tvAcc = 0;
-let _mtx = null, _clouds = null, _br = null, _tron = null, _stars = null, _stars2 = null;
+let tvScreenMesh = null, tvCtx = null, tvTex = null, tvScene = (parseInt(_wq.get("tv"), 10) || 0), tvAcc = 0;   // ?tv=N 调试:初始电视画面(0黑客帝国…7终局大决战)
+let _mtx = null, _clouds = null, _br = null, _tron = null, _stars = null, _stars2 = null, _eg = null;
 // 1) 黑客帝国：绿色字符雨在黑底上流动
 function tvMatrix(c, w, h) {
   if (!_mtx) { _mtx = []; for (let i = 0; i < Math.floor(w / 6); i++) _mtx[i] = Math.random() * h; }
@@ -1135,7 +1135,62 @@ function tvWandering(c, w, h, t) {
   c.fillStyle = "rgba(220,235,255,0.75)"; c.fillRect(ex - er * 0.5, ey - er + 1, er, 4);           // 冰封(白)
   c.fillStyle = "#aee8ff"; for (let i = 0; i < 5; i++) { const a = Math.PI * 0.5 + i * 0.16 - 0.32; c.fillRect(ex + Math.cos(a) * er - 1, ey + Math.sin(a) * er - 1, 2, 2); }   // 发动机亮点
 }
-const TV_SCENES = [tvMatrix, tvMiyazaki, tvBladeRunner, tvTron, tvHal, tvTatooine, tvWandering];
+// 8) 超级英雄终局大决战(原创像素致敬，非复制任何影视画面)：风暴废墟战场 + 发光传送门 +
+//    红金铠甲英雄(举手放光) + 持三色圆盾蓝衣英雄 + 众伙伴 + 大军剪影 + 远处威胁红眼 + 飘升火星
+function tvEndgame(c, w, h, t) {
+  if (!_eg) {
+    _eg = { embers: [], army: [] };
+    for (let i = 0; i < 18; i++) _eg.embers.push({ x: Math.random() * w, y: Math.random() * h, s: 0.3 + Math.random() * 0.8, r: Math.random() < 0.3 ? 2 : 1 });
+    for (let i = 0; i < 22; i++) _eg.army.push({ x: 6 + Math.random() * (w * 0.55), y: h * 0.6 + Math.random() * (h * 0.28), ph: Math.random() * 6 });
+  }
+  const sky = c.createLinearGradient(0, 0, 0, h);                       // 风暴天空→地平线火光
+  sky.addColorStop(0, "#161d30"); sky.addColorStop(0.5, "#3a2c3a"); sky.addColorStop(0.78, "#8f3c1c"); sky.addColorStop(1, "#e07a2a");
+  c.fillStyle = sky; c.fillRect(0, 0, w, h);
+  c.fillStyle = "#0e1018";                                             // 废墟天际线剪影
+  for (const [x, y, bw, bh] of [[0, 72, 18, 33], [20, 60, 14, 45], [36, 68, 10, 37], [120, 58, 16, 47], [140, 66, 12, 39], [154, 52, 14, 53]]) c.fillRect(x, y, bw, bh);
+  for (let i = 0; i < 3; i++) {                                        // 发光橙色传送门(脉动+旋转弧)
+    const px = w * 0.66 + i * 16, py = 26 + (i % 2) * 10, rr = 9 + i * 3 + Math.sin(t * 3 + i) * 1.5;
+    const g = c.createRadialGradient(px, py, 1, px, py, rr + 5);
+    g.addColorStop(0, "rgba(255,210,120,0.9)"); g.addColorStop(0.6, "rgba(255,150,40,0.55)"); g.addColorStop(1, "rgba(255,120,20,0)");
+    c.fillStyle = g; c.beginPath(); c.arc(px, py, rr + 5, 0, 7); c.fill();
+    c.strokeStyle = "#ffcf7a"; c.lineWidth = 1.5; c.beginPath(); c.arc(px, py, rr, t * 1.5 + i, t * 1.5 + i + 5); c.stroke();
+  }
+  c.fillStyle = "#241a18"; c.fillRect(0, h - 14, w, 14);               // 地面废墟
+  c.fillStyle = "#160f0e"; for (let x = 0; x < w; x += 9) c.fillRect(x, h - 14 + (x % 18 ? 0 : 3), 6, 4);
+  for (const a of _eg.army) {                                         // 大军剪影(推进起伏)
+    const bob = Math.sin(t * 3 + a.ph) * 1.2;
+    c.fillStyle = "#0c0e16"; c.fillRect(a.x, a.y - 6 + bob, 3, 6); c.fillRect(a.x, a.y - 9 + bob, 3, 2.5);
+  }
+  const gy = h - 16;                                                   // 前景英雄站立基线
+  // 红金铠甲英雄(举手放光)
+  let x = w * 0.34;
+  c.fillStyle = "#b81f1f"; c.fillRect(x, gy - 13, 7, 9);
+  c.fillStyle = "#e8c24a"; c.fillRect(x, gy - 13, 7, 2); c.fillRect(x, gy - 4, 3, 4); c.fillRect(x + 4, gy - 4, 3, 4); c.fillRect(x + 1, gy - 16, 5, 3);
+  c.fillStyle = "#7fe0ff"; c.fillRect(x + 2, gy - 10, 3, 3);          // 胸口反应堆
+  c.fillStyle = `rgba(150,235,255,${0.5 + 0.5 * Math.sin(t * 9)})`; c.fillRect(x + 7, gy - 12, 6, 2);   // 掌心射线
+  // 持三色圆盾蓝衣英雄
+  x = w * 0.46;
+  c.fillStyle = "#2b56b0"; c.fillRect(x, gy - 13, 7, 9); c.fillRect(x, gy - 4, 3, 4); c.fillRect(x + 4, gy - 4, 3, 4);
+  c.fillStyle = "#cfe0ff"; c.fillRect(x + 1, gy - 16, 5, 3);
+  const sx = x - 4, sy = gy - 9;
+  c.fillStyle = "#1f3f8a"; c.beginPath(); c.arc(sx, sy, 5, 0, 7); c.fill();
+  c.fillStyle = "#e8e8ee"; c.beginPath(); c.arc(sx, sy, 3.4, 0, 7); c.fill();
+  c.fillStyle = "#c8302a"; c.beginPath(); c.arc(sx, sy, 1.8, 0, 7); c.fill();
+  // 众伙伴(不同色小人 + 发光点)
+  for (const [ax, body, glow] of [[w * 0.20, "#2f9e54", "#8affb0"], [w * 0.58, "#7a3ca0", "#d8a0ff"], [w * 0.27, "#caa23a", "#fff0a0"]]) {
+    c.fillStyle = body; c.fillRect(ax, gy - 11, 6, 7); c.fillRect(ax, gy - 4, 2.5, 4); c.fillRect(ax + 3.5, gy - 4, 2.5, 4);
+    c.fillStyle = "#e8d8c0"; c.fillRect(ax + 1, gy - 14, 4, 3);
+    c.fillStyle = glow; c.fillRect(ax + 1, gy - 9, 2, 2);
+  }
+  // 远处威胁(大剪影 + 脉动红眼)
+  c.fillStyle = "#0a0c12"; c.fillRect(w - 22, gy - 22, 15, 22); c.fillRect(w - 25, gy - 26, 21, 7);
+  c.fillStyle = `rgba(255,60,40,${0.6 + 0.4 * Math.sin(t * 4)})`; c.fillRect(w - 20, gy - 23, 3, 2); c.fillRect(w - 14, gy - 23, 3, 2);
+  for (const e of _eg.embers) {                                       // 飘升火星
+    e.y -= e.s; e.x += Math.sin(t * 2 + e.y * 0.1) * 0.3; if (e.y < 0) { e.y = h; e.x = Math.random() * w; }
+    c.fillStyle = (e.x + e.y) % 2 < 1 ? "#ffb347" : "#ff7a2a"; c.fillRect(e.x | 0, e.y | 0, e.r, e.r);
+  }
+}
+const TV_SCENES = [tvMatrix, tvMiyazaki, tvBladeRunner, tvTron, tvHal, tvTatooine, tvWandering, tvEndgame];
 function makeTvScreen(pw, ph) {
   const cv = document.createElement("canvas"); cv.width = TV_W; cv.height = TV_H;
   tvCtx = cv.getContext("2d");
