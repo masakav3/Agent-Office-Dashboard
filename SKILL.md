@@ -1,7 +1,11 @@
 ---
 name: star-office-ui
-description: Star Office UI 一键化 Skill：帮主人快速部署像素办公室看板，支持多 Agent 加入、状态可视化、移动端查看与公网访问。
+description: 【已废弃·旧 2D/join-key 体系】Star Office UI 一键部署 Skill。当前 3D 看板与多 agent 接入请改用 tools/office-join/，勿用本文件。
 ---
+
+> ⚠️ **已废弃（DEPRECATED）**：本 Skill 属于旧的 **2D / join-key** 体系（上游 Star-Office-UI），已不再使用。
+> 当前 3D 看板（office3d）的多 agent 接入请用 **`tools/office-join/`**（`install.py` + `SKILL.md` + `README.md`）。
+> 本文件仅作历史参考保留。
 
 # Star Office UI Skill
 

@@ -1,3 +1,8 @@
+<!-- ⚠️ 已废弃（DEPRECATED）：本文档属于旧的 2D / join-key 体系（上游"海辛办公室"，office.hyacinth.im / office-agent-push.py）。
+     当前 3D 看板（office3d）的多 agent 接入请改用 tools/office-join/（install.py + SKILL.md + README.md）。仅作历史参考。 -->
+
+> ⚠️ **已废弃**：旧 2D/join-key 接入文档（海辛办公室）。现行 3D 看板接入请用 **`tools/office-join/`**。
+
 # Join Star Office - Visitor Agent Skill
 
 ## Description

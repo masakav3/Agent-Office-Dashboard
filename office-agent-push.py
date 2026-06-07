@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """
+⚠️ 已废弃（DEPRECATED）：旧 2D / join-key 体系（"海辛办公室"）的状态推送客户端，已不再使用。
+当前 3D 看板的接入请改用 hooks/cc_state_push.py（一键安装见 tools/office-join/）。本文件仅作历史参考。
+
 海辛办公室 - Agent 状态主动推送脚本
 
 用法：
