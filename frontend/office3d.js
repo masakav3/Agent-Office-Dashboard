@@ -1213,9 +1213,19 @@ function makeNamePlate(label, ry = 0) {
   g.beginPath(); g.moveTo(r, 0);
   g.arcTo(W, 0, W, H, r); g.arcTo(W, H, 0, H, r); g.arcTo(0, H, 0, 0, r); g.arcTo(0, 0, W, 0, r);
   g.closePath(); g.fill();
-  g.font = "bold 64px -apple-system,'PingFang SC','Helvetica Neue',sans-serif";
   g.textAlign = "center"; g.textBaseline = "middle";
-  g.fillStyle = "#eef2ff"; g.fillText((label || "office").slice(0, 18), W / 2, H / 2 + 4);
+  const FONT = (s) => `bold ${s}px -apple-system,'PingFang SC','Helvetica Neue',sans-serif`;
+  const full = String(label || "office");
+  const maxW = W - 56;                                 // 左右留白
+  let fs = 64;                                         // 自动缩字号铺满:长名缩小而非截断
+  g.font = FONT(fs);
+  while (fs > 24 && g.measureText(full).width > maxW) { fs -= 2; g.font = FONT(fs); }
+  let txt = full;
+  if (g.measureText(txt).width > maxW) {               // 缩到下限仍超长 → 末尾省略
+    while (txt.length > 1 && g.measureText(txt + "…").width > maxW) txt = txt.slice(0, -1);
+    txt += "…";
+  }
+  g.fillStyle = "#eef2ff"; g.fillText(txt, W / 2, H / 2 + 4);
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
   const pl = new THREE.Mesh(new THREE.PlaneGeometry(2.7, 0.76),
     new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));

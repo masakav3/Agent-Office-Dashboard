@@ -107,6 +107,24 @@ def base_label(cwd: str) -> str:
     return os.path.basename(cwd) or cwd or "office"
 
 
+def _transcript_path(data: dict) -> str:
+    """事件自带 transcript_path 优先；否则按 Claude Code 约定从 cwd+session_id 重建：
+    ~/.claude/projects/<cwd 把 '/' '.' 换成 '-'>/<session_id>.jsonl。
+    这样不带 transcript_path 的事件(如 Notification)也能拿到名字，避免名牌在'首条提问'与'目录名'间来回跳。
+    非 CC 工具重建不中 -> 空串(room_label 回退 cwd 目录名)。"""
+    p = (data.get("transcript_path") or "").strip()
+    if p:
+        return p
+    sid = canon_session(data)
+    cwd = (data.get("cwd") or "").strip()
+    if sid and cwd:
+        proj = cwd.replace("/", "-").replace(".", "-")
+        cand = os.path.expanduser(f"~/.claude/projects/{proj}/{sid}.jsonl")
+        if os.path.isfile(cand):
+            return cand
+    return ""
+
+
 def first_user_prompt(transcript_path: str) -> Optional[str]:
     """读 transcript 头部，取首条真实用户提问当办公室名(像 /resume 的会话标题，一眼认出哪个窗口)。
     取不到/无 transcript -> None(退回 cwd 目录名)。"""
@@ -149,7 +167,7 @@ def room_label(data: dict) -> str:
     env_label = (os.environ.get("CLAUDE_OFFICE_LABEL") or "").strip()
     if env_label:
         return env_label[:LABEL_MAX_LEN]
-    title = first_user_prompt(data.get("transcript_path"))
+    title = first_user_prompt(_transcript_path(data))   # 自带优先, 否则按 cwd+sid 重建(防名字跳变)
     if title:
         return (title[:LABEL_MAX_LEN - 1] + "…") if len(title) > LABEL_MAX_LEN else title
     return base_label(data.get("cwd") or "")
