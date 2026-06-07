@@ -605,6 +605,9 @@ function channelHalo(ch) {
   if (/cursor/.test(c))   return { rgb: [0.03, 0.03, 0.05], outline: [3.4, 3.4, 3.9] };  // 黑 + 白描边发光
   if (/trae/.test(c))     return { rgb: [0.7, 4.0, 0.9] };            // 荧光绿
   if (/vs[\s_-]?code|vscode/.test(c)) return { rgb: [1.4, 2.7, 3.9] }; // 天蓝/浅蓝
+  if (/cline/.test(c))    return { rgb: [0.2, 3.0, 2.8] };            // 青绿(teal)
+  if (/continue/.test(c)) return { rgb: [1.6, 0.9, 3.9] };           // 靛蓝(indigo)
+  if (/copilot/.test(c))  return { rgb: [1.1, 1.3, 1.7], outline: [2.8, 3.0, 3.5] }; // 钢灰+白描边(GitHub 单色风)
   if (/claude/.test(c))   return { rgb: [3.6, 1.7, 0.7] };            // claude 橙
   return { rgb: [3.7, 1.4, 2.3] };                                    // 其他未命中：粉粉
 }

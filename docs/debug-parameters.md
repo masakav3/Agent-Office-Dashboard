@@ -231,6 +231,9 @@ await browser.close();
 | `cursor` | 黑环 + 白色发光描边 |
 | `trae` | 荧光绿 |
 | `vscode` / `vs code` | 天蓝/浅蓝 |
+| `cline` | 青绿 teal |
+| `continue` | 靛蓝 indigo |
+| `copilot` | 钢灰 + 白色描边（GitHub 单色风） |
 | 其他未命中 | 粉粉（默认） |
 
 **怎么设**：在 `settings.json` 各 hook 事件的命令前加环境变量（按你当前用的工具填）：
