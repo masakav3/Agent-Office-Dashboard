@@ -260,6 +260,7 @@ const LEDB = parseFloat(_wq.get("led")) || 0;                    // LED 灯带�
 const ANIM_OVERRIDE = _wq.get("anim");                           // 调试:强制全体角色播某动作/状态(working/walk/sprint/jump/sit/idle…)
 const DBG = _wq.get("dbg") === "1";                              // 调试层:XYZ 轴 + 每间外墙顶 LED 按房间序上色(红橙黄绿青蓝紫粉),便于定位沟通
 const PATHS = _wq.get("paths") === "1";                          // 只看动线:每间房 seat→exit→entry→lounge 路点+地面色带(不含坐标轴/外墙配色)
+const MONSTER_DBG = _wq.has("monster") && _wq.get("monster") !== "0";   // 调试:?monster=1 强制每间都冒怪兽(不必真报错), 方便看怪兽长啥样
 const DBG_LINE = [   // 房间序→外墙线条色(HDR 入 Bloom)：红 橙 黄 绿 青 蓝 紫 粉(对应 ring1 顺序 +Z/+X/-Z/-X/对角)
   [2.6, 0.1, 0.1], [2.6, 1.0, 0.05], [2.5, 2.2, 0.1], [0.2, 2.4, 0.5],
   [0.1, 2.2, 2.6], [0.3, 0.7, 2.8], [1.6, 0.4, 2.8], [2.6, 0.5, 1.6]];
@@ -1348,11 +1349,12 @@ function syncRooms(list) {
     }
     while (room.emps.length > want) { const e = room.emps.pop(); if (e.userData.walk && e.userData.walk.spot) e.userData.walk.spot.taken = false; room.group.remove(e); }   // 移除时释放其占用
     room.emps.forEach((e) => { if (e.userData.walk.phase === "seated") setFigState(e, (r.boss && r.boss.state) === "delegating" ? "executing" : "working"); });   // 走动中不打断
-    // 怪兽
-    if (r.monster && !room.monster) {
+    // 怪兽(?monster=1 调试时强制每间都冒，不必真报错)
+    const wantMon = r.monster || MONSTER_DBG;
+    if (wantMon && !room.monster) {
       room.monster = makeMonster(); room.monster.position.set(0, 0.16, -0.4); room.group.add(room.monster);
       setFigState(room.fig, "error");
-    } else if (!r.monster && room.monster) {
+    } else if (!wantMon && room.monster) {
       room.group.remove(room.monster); room.monster = null;
     }
   });
