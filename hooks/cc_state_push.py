@@ -23,8 +23,9 @@ claude-office · Claude Code 状态转发钩子（Phase 2：多办公室）
   CLAUDE_OFFICE_URL    后端地址，默认 http://127.0.0.1:19000
                         内网接入：指向起后端那台机的局域网地址，例如
                           CLAUDE_OFFICE_URL=http://10.31.3.100:19000
-  CLAUDE_OFFICE_LABEL  办公室名牌(agent 名称)。设了就用它，否则退回 cwd 目录名。
-                        让每个接入方在自己的 settings.json 里给自己起名：
+  CLAUDE_OFFICE_LABEL  办公室名牌(agent 名称)。优先级：本变量 > 会话首条提问(读
+                        transcript，像 /resume 的标题) > cwd 目录名。多窗口时首条提问
+                        最易认出谁是谁；要固定名就显式设本变量：
                           CLAUDE_OFFICE_LABEL="王五的Claude" python3 .../hooks/cc_state_push.py
   CLAUDE_OFFICE_TOKEN  共享接入口令(可选)。后端设了 CC_PUSH_TOKEN 时必须填且匹配，
                         否则 /cc/push 返回 401；后端没设则填不填都行。防内网伪造/乱推。
@@ -106,6 +107,54 @@ def base_label(cwd: str) -> str:
     return os.path.basename(cwd) or cwd or "office"
 
 
+def first_user_prompt(transcript_path: str) -> Optional[str]:
+    """读 transcript 头部，取首条真实用户提问当办公室名(像 /resume 的会话标题，一眼认出哪个窗口)。
+    取不到/无 transcript -> None(退回 cwd 目录名)。"""
+    path = (transcript_path or "").strip()
+    if not path or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            head = f.read(64 * 1024)               # 首条提问就在头部, 64KB 足够
+        for line in head.splitlines():
+            line = line.strip()
+            if not line or '"user"' not in line:
+                continue
+            try:
+                obj = json.loads(line)
+            except Exception:
+                continue
+            if obj.get("type") != "user":
+                continue
+            msg = obj.get("message")
+            if not isinstance(msg, dict) or msg.get("role") != "user":
+                continue
+            content = msg.get("content")
+            text = ""
+            if isinstance(content, str):
+                text = content
+            elif isinstance(content, list):        # 数组型: 拼接 text 块(跳过 tool_result 等)
+                text = " ".join(b.get("text", "") for b in content
+                                if isinstance(b, dict) and b.get("type") == "text")
+            text = " ".join(text.split()).strip()  # 折叠换行/多空格
+            if text and not text.startswith("<"):  # 跳过命令/系统包装(<command-name> 等)
+                return text
+    except Exception:
+        return None
+    return None
+
+
+def room_label(data: dict) -> str:
+    """办公室名牌优先级：CLAUDE_OFFICE_LABEL(显式) > 会话首条提问(可读) > cwd 目录名(兜底)。"""
+    env_label = (os.environ.get("CLAUDE_OFFICE_LABEL") or "").strip()
+    if env_label:
+        return env_label[:LABEL_MAX_LEN]
+    title = first_user_prompt(data.get("transcript_path"))
+    if title:
+        return (title[:LABEL_MAX_LEN - 1] + "…") if len(title) > LABEL_MAX_LEN else title
+    return base_label(data.get("cwd") or "")
+
+
 # ── 非 Claude Code 工具的事件名/字段归一 ──────────────────────────────────
 # 生态已收敛到 CC hook 模型: Cursor/Codex/Copilot/Continue 直接同形(同字段同事件名);
 # Gemini/Cline/Hermes 的 stdin 同形但事件名不同, 在此映射回规范 CC 事件名 → 一份 hook 通吃。
@@ -159,7 +208,7 @@ def build_op(data: dict) -> Optional[dict]:
     tool_name = canon_tool(data)
     # automode：Claude Code 自动接受编辑 / 绕过权限模式 → 看板亮黄灯
     pm = (data.get("permission_mode") or data.get("permissionMode") or "").strip()
-    base = {"sessionId": session_id, "room": base_label(data.get("cwd") or ""),
+    base = {"sessionId": session_id, "room": room_label(data),
             "automode": pm in ("acceptEdits", "bypassPermissions"),
             "channel": (os.environ.get("CLAUDE_OFFICE_CHANNEL") or "").strip()}   # 来源工具→主 agent 光环颜色
 

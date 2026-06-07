@@ -119,7 +119,7 @@ cd ~/Documents/GitHub/claude-office
 | 变量 | 作用 | 默认 |
 |---|---|---|
 | `CLAUDE_OFFICE_URL` | 后端地址。内网接入填起后端那台机的局域网 IP，如 `http://10.31.3.100:19000` | `http://127.0.0.1:19000` |
-| `CLAUDE_OFFICE_LABEL` | 办公室名牌（agent 名称）。各接入方在自己 settings.json 里起名 | 空 → 退回 cwd 目录名 |
+| `CLAUDE_OFFICE_LABEL` | 办公室名牌（agent 名称）。各接入方在自己 settings.json 里起名 | 空 → 用**会话首条提问**（读 transcript，多窗口易辨认）→ 再退回 cwd 目录名 |
 | `CLAUDE_OFFICE_CHANNEL` | 来源工具（claude/openclaw/hermes/codex/gemini/kimi/cursor/trae/vscode…）→ 主 agent 光环色 | 空 → 默认粉环 |
 | `CLAUDE_OFFICE_TOKEN` | 共享接入口令。后端设了 `CC_PUSH_TOKEN` 时必填且匹配，否则 401；后端没设则可不填 | 空 |
 | `CLAUDE_OFFICE_DEBUG` | `=1` 时把每次事件追加到 `/tmp/claude-office-hook.log` | 关 |
