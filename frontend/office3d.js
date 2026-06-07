@@ -583,6 +583,11 @@ async function preloadModels() {
     const g = await loader.loadAsync(GLTF_BASE + n + ".glb");
     MODELS[n] = prepModel(g.scene); CLIPS[n] = g.animations; CHAR_KEYS.push(n);
   }
+  // 出错怪兽 = Kenney Blocky Characters 的金色机器人(独立 blocky/ 子目录防 colormap 串色)
+  try {
+    const rg = await loader.loadAsync(GLTF_BASE + "blocky/robot.glb");
+    MODELS._robot = prepModel(rg.scene);
+  } catch (e) { /* 机器人加载失败 → makeMonster 回退程序化红盒，不阻塞 */ }
 }
 function playClip(u, name) {
   if (!u.mixer || !u.clips || u.curClip === name) return;
@@ -649,17 +654,68 @@ function makeFigure(boss, channel) {
   g.userData = { disc: flash, mixer, clips, boss, phase: Math.random() * 6.28, state: "idle", action: null, curClip: null, armL, armR };
   return g;
 }
+// 出错怪兽：金色方块机器人(Kenney Blocky Characters) + 头顶冒烟 + 偶发火花 + 抖动/脉动红盘，像要爆炸
+const ROBOT_H = 1.2;
 function makeMonster() {
   const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.6, 0),
-    mat(0xe0503a, { rough: 0.5, emissive: 0x5a1208, ei: 0.5 }));
-  body.castShadow = true; body.position.y = 0.7; g.add(body);
-  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), mat(0xfff2cc, { emissive: 0xffcc55, ei: 0.6 }));
-  eye.position.set(0, 0.78, 0.5); g.add(eye);
+  let headY = ROBOT_H;
+  let robot;
+  if (MODELS._robot) {
+    robot = MODELS._robot.clone();
+    robot.scale.setScalar(ROBOT_H / (MODELS._robot.userData.size.y || 1));
+    g.add(robot);
+  } else {                                   // 回退：红盒子(模型没加载也不崩)
+    robot = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.9, 0.4), mat(0xc0392b, { rough: 0.5 }));
+    robot.position.y = 0.45; g.add(robot); headY = 0.95;
+  }
+  // 脚下红色警示盘(脉动)
   const disc = new THREE.Mesh(new THREE.CircleGeometry(0.7, 32),
-    new THREE.MeshBasicMaterial({ color: 0xe0503a, transparent: true, opacity: 0.7 }));
+    new THREE.MeshBasicMaterial({ color: 0xff3a1e, transparent: true, opacity: 0.6, toneMapped: false }));
   disc.rotation.x = -Math.PI / 2; disc.position.y = 0.06; g.add(disc);
-  g.userData = { body, phase: 0, monster: true };
+  // 头顶冒烟：一簇灰色 puff，上升 + 膨胀 + 淡出，循环
+  const puffs = [];
+  for (let i = 0; i < 7; i++) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0x6b6b72, transparent: true, opacity: 0, depthWrite: false }));
+    m.userData.p = i / 7; g.add(m); puffs.push(m);
+  }
+  // 火花：HDR 橙黄亮点，偶发蹦出 + 飞散下坠 + 淡出(入 Bloom)
+  const sparks = [];
+  for (let i = 0; i < 10; i++) {
+    const mt = new THREE.MeshBasicMaterial({ toneMapped: false, transparent: true, opacity: 0, depthWrite: false });
+    mt.color.setRGB(4.2, 2.7, 0.5);
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 5), mt);
+    m.userData = { life: 0, vx: 0, vy: 0, vz: 0 }; g.add(m); sparks.push(m);
+  }
+  g.userData = { monster: true, robot, disc, puffs, sparks, headY };
+  g.userData.tick = function (t, dt) {
+    if (robot) {                             // 抖动：要爆炸的高频小位移 + 轻微摆头
+      robot.position.x = (Math.sin(t * 37) + Math.sin(t * 53)) * 0.012;
+      robot.position.z = (Math.cos(t * 41) + Math.sin(t * 61)) * 0.012;
+      robot.rotation.y = Math.sin(t * 2.0) * 0.22;
+    }
+    disc.material.opacity = 0.35 + 0.4 * (0.5 + 0.5 * Math.sin(t * 6));   // 红盘脉动
+    for (const m of puffs) {                 // 冒烟
+      m.userData.p += dt * 0.5; if (m.userData.p > 1) m.userData.p -= 1;
+      const p = m.userData.p;
+      m.position.set(Math.sin(t * 1.3 + p * 9) * 0.06, headY + p * 0.55, Math.cos(t * 1.1 + p * 7) * 0.06);
+      m.scale.setScalar(0.5 + p * 1.8);
+      m.material.opacity = 0.5 * (1 - p) * Math.min(1, p * 4);
+    }
+    for (const s of sparks) {                // 火花：偶发蹦出
+      if (s.userData.life > 0) {
+        s.userData.life -= dt;
+        s.position.x += s.userData.vx * dt; s.position.y += s.userData.vy * dt; s.position.z += s.userData.vz * dt;
+        s.userData.vy -= 2.2 * dt;           // 重力下坠
+        s.material.opacity = Math.max(0, s.userData.life * 3);
+      } else if (Math.random() < 0.02) {
+        const a = Math.random() * Math.PI * 2, sp = 0.7 + Math.random() * 0.9;
+        s.position.set(0, headY * 0.85, 0);
+        s.userData.vx = Math.cos(a) * sp; s.userData.vz = Math.sin(a) * sp; s.userData.vy = 0.9 + Math.random() * 0.9;
+        s.userData.life = 0.35 + Math.random() * 0.3; s.material.opacity = 1;
+      }
+    }
+  };
   return g;
 }
 
@@ -1448,10 +1504,7 @@ function loop() {
     r.emps.forEach((e) => stepWalker(r, e, dt));        // 员工也偶尔去
     animFig(r.fig, t, dt);
     r.emps.forEach((e) => animFig(e, t, dt));
-    if (r.monster) {
-      r.monster.userData.body.rotation.y = t * 1.2;
-      r.monster.userData.body.position.y = 0.7 + Math.abs(Math.sin(t * 5)) * 0.12;
-    }
+    if (r.monster && r.monster.userData.tick) r.monster.userData.tick(t, dt);   // 机器人抖动 + 冒烟 + 火花
   }
   stepTv(dt, t);                                        // 中庭电视像素屏动画
   stepWeather(dt, t);                                   // 雨雪下落

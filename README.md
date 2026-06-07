@@ -109,7 +109,7 @@ Antigravity / OpenClaw 走 webhook 直推 `/cc/push`。各工具配置位置、�
 ## 致谢
 
 - Fork 自 [ringhyacinth/Star-Office-UI](https://github.com/ringhyacinth/Star-Office-UI)（MIT），借鉴了其角色移动算法等思路；本项目的多办公室数据模型、hook 桥接、iso/3D 渲染、天气与机房彩蛋为重写。
-- 3D 资产：[Kenney](https://kenney.nl/) **Furniture Kit**（家具）+ **Mini Characters**（角色）+ **Platformer Kit**（春/夏底座的树·花）+ **Survival Kit**（秋天的橙色松树·篝火）+ **Holiday Kit**（冬天的圣诞树·雪人·礼物），均 CC0 1.0，由 Kenney 制作发布，详见 `frontend/vendor/kenney/licenses/`。
+- 3D 资产：[Kenney](https://kenney.nl/) **Furniture Kit**（家具）+ **Mini Characters**（角色）+ **Platformer Kit**（春/夏底座的树·花）+ **Survival Kit**（秋天的橙色松树·篝火）+ **Holiday Kit**（冬天的圣诞树·雪人·礼物）+ **Blocky Characters**（出错怪兽的金色机器人），均 CC0 1.0，由 Kenney 制作发布，详见 `frontend/vendor/kenney/licenses/`。
 - 3D 渲染：[Three.js](https://threejs.org/)（MIT）。
 
 ## 许可
