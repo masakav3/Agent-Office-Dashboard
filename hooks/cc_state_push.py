@@ -22,6 +22,10 @@ claude-office · Claude Code 状态转发钩子（Phase 2：多办公室）
 环境变量：
   CLAUDE_OFFICE_URL    后端地址，默认 http://127.0.0.1:19000
   CLAUDE_OFFICE_DEBUG  设为 1 时把每次事件追加到 /tmp/claude-office-hook.log
+  CLAUDE_OFFICE_CHANNEL 来源工具名(claude/openclaw/hermes/codex/gemini/kimi/cursor/trae/vscode…)
+                        → 看板里主 agent 背后光环按此上色，未设则默认粉色。
+                        settings.json 里这样设：
+                          CLAUDE_OFFICE_CHANNEL=claude python3 .../hooks/cc_state_push.py
 AIGC CLAUDE-OPUS-4-8 2026-06-04
 """
 
@@ -95,7 +99,8 @@ def build_op(data: dict) -> Optional[dict]:
     # automode：Claude Code 自动接受编辑 / 绕过权限模式 → 看板亮黄灯
     pm = (data.get("permission_mode") or data.get("permissionMode") or "").strip()
     base = {"sessionId": session_id, "room": base_label(data.get("cwd") or ""),
-            "automode": pm in ("acceptEdits", "bypassPermissions")}
+            "automode": pm in ("acceptEdits", "bypassPermissions"),
+            "channel": (os.environ.get("CLAUDE_OFFICE_CHANNEL") or "").strip()}   # 来源工具→主 agent 光环颜色
 
     if event == "UserPromptSubmit":
         return {**base, "type": "state", "state": "thinking", "detail": "🧠 思考中…"}

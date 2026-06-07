@@ -2180,6 +2180,9 @@ def cc_push():
                 room["ctxPct"] = max(0.0, min(100.0, float(data["ctxPct"])))
             if "automode" in data:                               # automode(自动接受/绕过权限) → LED 黄灯
                 room["automode"] = bool(data.get("automode"))
+            ch = (data.get("channel") or "").strip()             # 来源工具(claude/openclaw/cursor…)→ 主 agent 光环颜色
+            if ch:
+                room["channel"] = ch
 
             if op == "delegate":
                 room["boss"] = {"state": "delegating",
@@ -2249,6 +2252,7 @@ def cc_rooms():
                     "ctxPct": room.get("ctxPct"),
                     "monster": monster,          # 出错怪兽:错误后 CC_MONSTER_TTL 秒内为真
                     "automode": bool(room.get("automode")),   # automode 启用 → LED 黄灯
+                    "channel": room.get("channel") or "",      # 来源工具 → 主 agent 光环颜色
                     "updated_at": room.get("updated_at"),
                 })
             if changed:

@@ -59,6 +59,8 @@ python3 -m venv .venv
 
 接入 Claude Code：在 `~/.claude/settings.json` 的相关事件里追加调用 `hooks/cc_state_push.py`（详见 [RUNBOOK.md](RUNBOOK.md) 第八节，含一键回滚脚本）。
 
+调试画面用的 URL 参数（季节 / 昼夜 / 天气 / 光照 / 辉光 / 粒子等全表）见 [docs/debug-parameters.md](docs/debug-parameters.md)，例如 `?season=winter&tod=night&sky=snow`。
+
 想先看满屏效果？喂个假事件造演示办公室（按 TTL 自动消失）：
 
 ```bash
@@ -78,13 +80,13 @@ printf '{"hook_event_name":"PreToolUse","tool_name":"Edit","session_id":"demo","
 
 代码以 **MIT** 开源。资产现状：
 
-- **3D 版（office3d，推荐）**：家具/角色均为 [Kenney](https://kenney.nl/) 的 **CC0 1.0（公共领域，可商用）** 低模资产；天空/光照/雨雪/辉光为程序生成。✅ 可随仓公开。
+- **3D 版（office3d，推荐）**：家具/角色/四季底座植被（树·花）均为 [Kenney](https://kenney.nl/) 的 **CC0 1.0（公共领域，可商用）** 低模资产；天空/光照/雨雪/辉光为程序生成。✅ 可随仓公开。
 - **2D 版（office，旧）**：仍含**第三方 IP** 示例素材（海报、角色、含品牌标识的车等），仅供本地演示。**公开 / 商用前必须移除或替换这些 2D 素材**——MIT 只覆盖代码，不覆盖这些图片的版权。
 
 ## 致谢
 
 - Fork 自 [ringhyacinth/Star-Office-UI](https://github.com/ringhyacinth/Star-Office-UI)（MIT），借鉴了其角色移动算法等思路；本项目的多办公室数据模型、hook 桥接、iso/3D 渲染、天气与机房彩蛋为重写。
-- 3D 资产：[Kenney](https://kenney.nl/) **Furniture Kit** + **Mini Characters**（CC0 1.0，by Kay Lousberg）。
+- 3D 资产：[Kenney](https://kenney.nl/) **Furniture Kit**（家具）+ **Mini Characters**（角色）+ **Platformer Kit**（春/夏底座的树·花）+ **Survival Kit**（秋天的橙色松树·篝火）+ **Holiday Kit**（冬天的圣诞树·雪人·礼物），均 CC0 1.0，由 Kenney 制作发布，详见 `frontend/vendor/kenney/licenses/`。
 - 3D 渲染：[Three.js](https://threejs.org/)（MIT）。
 
 ## 许可
