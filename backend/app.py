@@ -2081,6 +2081,9 @@ CC_IDLE_TTL = int(os.getenv("CC_IDLE_TTL", "150"))           # 忙但久未更�
 CC_DEAD_TTL = int(os.getenv("CC_DEAD_TTL", "1800"))          # 久无活动 → 判定会话已死 → 关闭办公室(崩溃/强杀兜底)
 CC_CLOSE_GRACE = int(os.getenv("CC_CLOSE_GRACE", "8"))       # 进入关闭后宽限(秒)，给前端走"下班离场"动画
 CC_BUSY = frozenset({"thinking", "researching", "writing", "executing", "delegating", "waiting"})
+# 防僵尸自动转 idle 的状态集：**不含 waiting** —— 停在权限框/通知是真的在等用户，
+# 之后不会再有新事件，该一直亮"待授权"直到用户处理；真崩了仍由 CC_DEAD_TTL 兜底移除，无僵尸风险。
+CC_AUTO_IDLE = CC_BUSY - {"waiting"}
 CC_MONSTER_TTL = int(os.getenv("CC_MONSTER_TTL", "25"))      # 出错后怪兽在办公室停留(秒)
 # 轻量鉴权: 设了 CC_PUSH_TOKEN 则 /cc/push 必须带匹配 token(X-Office-Token 头或 body.token);
 # 留空=开放模式(本机/可信内网, 与历史行为一致, 零破坏)。像 WiFi 密码一样发给接入的同事。
@@ -2240,8 +2243,8 @@ def cc_rooms():
                     store["rooms"].pop(sid, None); changed = True; continue
                 boss = dict(room.get("boss") or {})
                 # 自动 idle 防僵尸：忙 + 久未更新 → 当作 idle(头儿去茶水间)
-                if not room.get("closing") and boss.get("state") in CC_BUSY and _age(boss.get("updated_at")) > CC_IDLE_TTL:
-                    boss["state"] = "idle"
+                if not room.get("closing") and boss.get("state") in CC_AUTO_IDLE and _age(boss.get("updated_at")) > CC_IDLE_TTL:
+                    boss["state"] = "idle"   # waiting 不在此列：待授权一直亮，靠 CC_DEAD_TTL 兜底
                 emps = []
                 for e in room.get("employees", []):
                     if _age(e.get("updated_at")) <= CC_EMPLOYEE_TTL:
