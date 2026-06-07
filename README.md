@@ -79,7 +79,7 @@ printf '{"hook_event_name":"PreToolUse","tool_name":"Edit","session_id":"demo","
 ```bash
 python3 tools/office-join/install.py \
   --label "你的名字" --channel claude \
-  --url http://10.31.3.100:19000     # 本机用 127.0.0.1；内网填后端机的局域网 IP
+  --url http://192.168.1.50:19000     # 本机用 127.0.0.1；内网填后端机的局域网 IP
   # 后端开了鉴权再加 --token
 ```
 

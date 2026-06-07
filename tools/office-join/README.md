@@ -15,7 +15,7 @@
 ```bash
 python3 tools/office-join/install.py \
   --label "你的名字" --channel claude \
-  --url http://10.31.3.100:19000        # 本机用 http://127.0.0.1:19000
+  --url http://192.168.1.50:19000        # 本机用 http://127.0.0.1:19000
   # 后端开了鉴权再加: --token 团队口令
 ```
 
@@ -50,7 +50,7 @@ python3 tools/office-join/install.py \
 能发 HTTP 的，直接 POST `/cc/push`：
 
 ```bash
-curl -X POST http://10.31.3.100:19000/cc/push \
+curl -X POST http://192.168.1.50:19000/cc/push \
   -H 'Content-Type: application/json' \
   -H 'X-Office-Token: <口令，后端设了 CC_PUSH_TOKEN 才需要>' \
   -d '{"type":"state","sessionId":"my-agent-1","room":"我的Agent","channel":"openclaw","state":"writing","detail":"✍️ 干活中"}'

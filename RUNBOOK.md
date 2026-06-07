@@ -118,7 +118,7 @@ cd ~/Documents/GitHub/claude-office
 
 | 变量 | 作用 | 默认 |
 |---|---|---|
-| `CLAUDE_OFFICE_URL` | 后端地址。内网接入填起后端那台机的局域网 IP，如 `http://10.31.3.100:19000` | `http://127.0.0.1:19000` |
+| `CLAUDE_OFFICE_URL` | 后端地址。内网接入填起后端那台机的局域网 IP，如 `http://192.168.1.50:19000` | `http://127.0.0.1:19000` |
 | `CLAUDE_OFFICE_LABEL` | 办公室名牌（agent 名称）。各接入方在自己 settings.json 里起名 | 空 → 用**会话首条提问**（读 transcript，多窗口易辨认）→ 再退回 cwd 目录名 |
 | `CLAUDE_OFFICE_CHANNEL` | 来源工具（claude/openclaw/hermes/codex/gemini/kimi/cursor/trae/vscode…）→ 主 agent 光环色 | 空 → 默认粉环 |
 | `CLAUDE_OFFICE_TOKEN` | 共享接入口令。后端设了 `CC_PUSH_TOKEN` 时必填且匹配，否则 401；后端没设则可不填 | 空 |
@@ -152,7 +152,7 @@ PY
 让别的同事 / 别的机器上的 agent 也上同一块看板。前提：和起后端那台机在**同一内网**。
 
 1. **起后端那台机**（host）：
-   - 查内网 IP：`ipconfig getifaddr en0`（本机当前 = `10.31.3.100`）。后端已 `host=0.0.0.0`，内网可达。
+   - 查内网 IP：`ipconfig getifaddr en0`（示例 `192.168.1.50`，换成你的实际值）。后端已 `host=0.0.0.0`，内网可达。
    - 要鉴权就 `.env` 里加 `CC_PUSH_TOKEN=<给团队的口令>` 再重启后端；不要就跳过（开放模式）。
    - macOS 防火墙若开着，放行 19000（系统设置→网络→防火墙，或临时关）。
 2. **每个接入方**（teammate）：
@@ -162,7 +162,7 @@ PY
 ```jsonc
 {
   "env": {
-    "CLAUDE_OFFICE_URL": "http://10.31.3.100:19000",
+    "CLAUDE_OFFICE_URL": "http://192.168.1.50:19000",
     "CLAUDE_OFFICE_LABEL": "韩梅梅",          // ← 你的名字，看板名牌
     "CLAUDE_OFFICE_CHANNEL": "claude",        // ← 你用的工具，决定光环色
     "CLAUDE_OFFICE_TOKEN": "<口令>"           // ← 后端设了 CC_PUSH_TOKEN 才需要
@@ -184,7 +184,7 @@ PY
 **自测一行**（在 teammate 机器上，把 IP/口令换成实际值，看 host 看板是否冒出 `远程冒烟`）：
 
 ```bash
-CLAUDE_OFFICE_URL=http://10.31.3.100:19000 CLAUDE_OFFICE_LABEL=远程冒烟 CLAUDE_OFFICE_CHANNEL=claude CLAUDE_OFFICE_TOKEN=<口令> \
+CLAUDE_OFFICE_URL=http://192.168.1.50:19000 CLAUDE_OFFICE_LABEL=远程冒烟 CLAUDE_OFFICE_CHANNEL=claude CLAUDE_OFFICE_TOKEN=<口令> \
   python3 hooks/cc_state_push.py <<'EOF'
 {"hook_event_name":"PreToolUse","tool_name":"Edit","session_id":"smoke-remote","cwd":"/x/demo"}
 EOF

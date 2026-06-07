@@ -8,7 +8,7 @@ office-join · 把"Agent 办公室看板"的状态上报 hook 一键装进 Claud
 用法：
   # 安装/更新（再次运行=更新，不会重复追加）
   python3 install.py --label "王五的Claude" --channel claude \
-      --url http://10.31.3.100:19000 [--token 团队口令]
+      --url http://192.168.1.50:19000 [--token 团队口令]
 
   # 只看将写入什么，不落盘
   python3 install.py --label X --channel claude --print

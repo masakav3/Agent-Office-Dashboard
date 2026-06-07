@@ -273,7 +273,7 @@ CLAUDE_OFFICE_CHANNEL=claude python3 ~/Documents/GitHub/claude-office/hooks/cc_s
 凡能发 HTTP 的（Antigravity/OpenClaw webhook、CI、自写脚本），直接 `POST /cc/push`：
 
 ```bash
-curl -X POST http://10.31.3.100:19000/cc/push \
+curl -X POST http://192.168.1.50:19000/cc/push \
   -H 'Content-Type: application/json' \
   -H 'X-Office-Token: <口令，后端设了 CC_PUSH_TOKEN 才需要>' \
   -d '{"type":"state","sessionId":"my-agent-1","room":"我的Agent","channel":"openclaw","state":"writing","detail":"✍️ 干活中"}'

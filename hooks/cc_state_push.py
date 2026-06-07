@@ -22,7 +22,7 @@ claude-office · Claude Code 状态转发钩子（Phase 2：多办公室）
 环境变量：
   CLAUDE_OFFICE_URL    后端地址，默认 http://127.0.0.1:19000
                         内网接入：指向起后端那台机的局域网地址，例如
-                          CLAUDE_OFFICE_URL=http://10.31.3.100:19000
+                          CLAUDE_OFFICE_URL=http://192.168.1.50:19000
   CLAUDE_OFFICE_LABEL  办公室名牌(agent 名称)。优先级：本变量 > 会话首条提问(读
                         transcript，像 /resume 的标题) > cwd 目录名。多窗口时首条提问
                         最易认出谁是谁；要固定名就显式设本变量：
@@ -36,7 +36,7 @@ claude-office · Claude Code 状态转发钩子（Phase 2：多办公室）
                           CLAUDE_OFFICE_CHANNEL=claude python3 .../hooks/cc_state_push.py
 
 多机内网接入一行示例（三个变量一起设）：
-  CLAUDE_OFFICE_URL=http://10.31.3.100:19000 CLAUDE_OFFICE_LABEL="王五" \
+  CLAUDE_OFFICE_URL=http://192.168.1.50:19000 CLAUDE_OFFICE_LABEL="王五" \
     CLAUDE_OFFICE_CHANNEL=claude python3 .../hooks/cc_state_push.py
 AIGC CLAUDE-OPUS-4-8 2026-06-04
 """
