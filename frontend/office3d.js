@@ -1331,6 +1331,7 @@ function syncRooms(list) {
     const room = rooms.get(r.sessionId);
     if (!room) return;
     const bossState = (r.boss && r.boss.state) || "idle";
+    room.bossState = bossState;   // 实时状态(走动时 u.state 不更新, 这里给 walker 判忙闲用)
     if (room.fig.userData.walk.phase === "seated") setFigState(room.fig, bossState);   // 走动/喝咖啡时不被状态轮询打断动作
     if (room.ledMat) {
       if (DBG) room.ledMat.color.setRGB(...DBG_LINE[(room.idx ?? 0) % DBG_LINE.length]);   // 调试:外墙线条按房间序固定上色(盖过状态色)
@@ -1370,8 +1371,10 @@ let autoRotate = false;
 function stepWalker(room, fig, dt) {
   const u = fig.userData, w = u.walk;
   if (!w) return;
+  // 联动会话状态: 忙(执行/写/思考/派活/待授权…)或出错 → 该在岗工作, 不去喝咖啡; 只有 idle 才允许溜达
+  const busy = !!room.monster || (!!room.bossState && room.bossState !== "idle");
   if (w.phase === "seated") {
-    if (room.monster) return;                        // 出错(怪兽)时不离岗
+    if (busy) { w.timer = w.isBoss ? randTrip() : empTrip(); return; }   // 在岗(重置计时:空闲一段后才去)
     w.timer -= dt;
     if (w.timer <= 0) {
       const spot = LOUNGE_SPOTS.find((s) => !s.taken);
@@ -1384,6 +1387,7 @@ function stepWalker(room, fig, dt) {
     return;
   }
   if (w.phase === "lounging") {
+    if (busy) w.timer = 0;                           // 喝着咖啡突然忙起来 → 立刻收杯回工位
     w.timer -= dt;
     if (w.timer <= 0) { w.route = w.route.slice().reverse(); w.seg = 1; w.phase = "toSeat"; u.walking = true; fig.position.y = WALK_Y; playClip(u, "walk"); }
     return;
