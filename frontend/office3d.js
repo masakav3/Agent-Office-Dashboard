@@ -1207,9 +1207,9 @@ function hashStr(s) { let h = 0; for (let i = 0; i < (s || "").length; i++) h = 
 
 // 地面入口铭牌：会话名做成朝镜头一侧的地面地垫(半透明深底+浅字)，平铺融入地景，日夜都清晰
 function makeNamePlate(label, ry = 0) {
-  const cv = document.createElement("canvas"); cv.width = 512; cv.height = 144;
+  const cv = document.createElement("canvas"); cv.width = 896; cv.height = 144;   // 加宽地垫:长名不必缩太小
   const g = cv.getContext("2d");
-  const r = 32, W = 512, H = 144;
+  const r = 32, W = 896, H = 144;
   g.fillStyle = "rgba(16,18,26,0.46)";
   g.beginPath(); g.moveTo(r, 0);
   g.arcTo(W, 0, W, H, r); g.arcTo(W, H, 0, H, r); g.arcTo(0, H, 0, 0, r); g.arcTo(0, 0, W, 0, r);
@@ -1220,7 +1220,7 @@ function makeNamePlate(label, ry = 0) {
   const maxW = W - 56;                                 // 左右留白
   let fs = 64;                                         // 自动缩字号铺满:长名缩小而非截断
   g.font = FONT(fs);
-  while (fs > 24 && g.measureText(full).width > maxW) { fs -= 2; g.font = FONT(fs); }
+  while (fs > 34 && g.measureText(full).width > maxW) { fs -= 2; g.font = FONT(fs); }   // 字号下限抬高,保证可读
   let txt = full;
   if (g.measureText(txt).width > maxW) {               // 缩到下限仍超长 → 末尾省略
     while (txt.length > 1 && g.measureText(txt + "…").width > maxW) txt = txt.slice(0, -1);
@@ -1228,7 +1228,7 @@ function makeNamePlate(label, ry = 0) {
   }
   g.fillStyle = "#eef2ff"; g.fillText(txt, W / 2, H / 2 + 4);
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
-  const pl = new THREE.Mesh(new THREE.PlaneGeometry(2.7, 0.76),
+  const pl = new THREE.Mesh(new THREE.PlaneGeometry(4.8, 0.76),
     new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
   pl.rotation.x = -Math.PI / 2;                              // 平铺地面
   pl.renderOrder = 2;
