@@ -21,11 +21,20 @@ claude-office · Claude Code 状态转发钩子（Phase 2：多办公室）
 
 环境变量：
   CLAUDE_OFFICE_URL    后端地址，默认 http://127.0.0.1:19000
+                        内网接入：指向起后端那台机的局域网地址，例如
+                          CLAUDE_OFFICE_URL=http://10.31.3.100:19000
+  CLAUDE_OFFICE_LABEL  办公室名牌(agent 名称)。设了就用它，否则退回 cwd 目录名。
+                        让每个接入方在自己的 settings.json 里给自己起名：
+                          CLAUDE_OFFICE_LABEL="王五的Claude" python3 .../hooks/cc_state_push.py
   CLAUDE_OFFICE_DEBUG  设为 1 时把每次事件追加到 /tmp/claude-office-hook.log
   CLAUDE_OFFICE_CHANNEL 来源工具名(claude/openclaw/hermes/codex/gemini/kimi/cursor/trae/vscode…)
                         → 看板里主 agent 背后光环按此上色，未设则默认粉色。
                         settings.json 里这样设：
                           CLAUDE_OFFICE_CHANNEL=claude python3 .../hooks/cc_state_push.py
+
+多机内网接入一行示例（三个变量一起设）：
+  CLAUDE_OFFICE_URL=http://10.31.3.100:19000 CLAUDE_OFFICE_LABEL="王五" \
+    CLAUDE_OFFICE_CHANNEL=claude python3 .../hooks/cc_state_push.py
 AIGC CLAUDE-OPUS-4-8 2026-06-04
 """
 
@@ -83,8 +92,14 @@ def subagent_name(data: dict) -> str:
     return "子代理"
 
 
+LABEL_MAX_LEN = 40  # 名牌过长会撑爆地面铭牌，截断保护
+
+
 def base_label(cwd: str) -> str:
-    """工作目录末级目录名当办公室名。"""
+    """办公室名牌：优先 CLAUDE_OFFICE_LABEL(各 agent 自定义名)，否则用 cwd 末级目录名。"""
+    env_label = (os.environ.get("CLAUDE_OFFICE_LABEL") or "").strip()
+    if env_label:
+        return env_label[:LABEL_MAX_LEN]
     cwd = (cwd or "").rstrip("/")
     return os.path.basename(cwd) or cwd or "office"
 
