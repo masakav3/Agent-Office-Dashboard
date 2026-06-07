@@ -14,19 +14,19 @@
 
 - 🏢 **微缩办公楼**：每个会话一间办公室，永不空楼
 - 🌦 **天气彩蛋**：按你所在城市的**真实天气**驱动光照与天空（晴/多云/雨/雪/雾/雷暴 + 昼夜），下雨真的会下雨、夜里办公室亮灯
-- 🖥 **DGX·B300 机房**：探测一个监控网址的连通性，绿灯在线 / 红灯离线
+- 🚥 **墙顶状态灯**：每间办公室墙顶 LED 按主 agent 状态发光——进行中(绿) / 待授权(橙) / 待命(白) / AUTOMODE(初音绿) / 出错(红)
+- 🎨 **来源工具光环**：主 agent 背后光环按来源工具上色（claude / cursor / gemini / kimi / codex …），一眼看出谁在用什么工具
+- 🖥 **DGX·B300 机房**：探测一个监控网址的连通性，顶栏绿灯在线 / 红灯离线
 - 👾 **出错怪兽**：agent 报错时，那间办公室会冒出一只怪兽，错误解除后离场
-- 🚗 **门口车流**：车流密度 = 全楼上下文占用率（越忙越堵）
 
-## 两种视图
+## 看板视图
 
-| 视图 | 地址 | 技术 |
-|---|---|---|
-| **3D 微缩**（开发中，推荐）| `/static/office3d.html` | Three.js · 正交 iso · 软阴影 · 移轴景深 · 暖色调 |
-| **2D 等距**（稳定）| `/office` | 自绘 Canvas 2D 斜 45° iso |
+**3D 微缩办公室**（Three.js · 正交 iso · 软阴影 · 移轴景深 · 暖色调），可 🖱 拖拽旋转、滚轮缩放，像把玩一个桌面模型。
 
-3D 版可以 🖱 拖拽旋转、滚轮缩放，像把玩一个桌面模型。
-调试任意天气：`/static/office3d.html?sky=rain&tod=night`（sky ∈ clear/partly/cloudy/fog/rain/storm/snow）。
+- 地址：`/office` 或 `/static/office3d.html`
+- 调试任意天气：`/static/office3d.html?sky=rain&tod=night`（sky ∈ clear/partly/cloudy/fog/rain/storm/snow）
+
+> 早期的 2D Canvas 等距视图已退役（渲染代码移除）；仅遗留一个旧首页仍挂在 `/` 根路由，见下「素材与开源须知」。
 
 ## 架构（数据层与渲染层解耦）
 
@@ -37,10 +37,10 @@ Claude Code hook 事件
 Flask 后端 backend/app.py  (127.0.0.1:19000)
         │  纯文件存储 cc-rooms.json，无数据库
         ▼  GET /cc/rooms · /cc/weather（前端轮询）
-前端渲染层  frontend/office.{html,js}（2D）  ·  frontend/office3d.{html,js}（3D）
+前端渲染层  frontend/office3d.{html,js}（Three.js 3D，本地 vendoring three r160）
 ```
 
-> **关键设计**：hook + 后端是稳定的**数据层**；2D / 3D 只是可替换的**渲染层**，读同一个 `/cc/rooms`。换皮不动骨。
+> **关键设计**：hook + 后端是稳定的**数据层**，渲染层读同一个 `/cc/rooms`，换皮不动骨——早期有过 2D Canvas 渲染层，现已统一到 3D。
 
 ## 快速开始
 
@@ -52,9 +52,8 @@ python3 -m venv .venv
 # 2. 起后端（监听 127.0.0.1:19000）
 .venv/bin/python backend/app.py
 
-# 3. 打开看板
-#    3D: http://127.0.0.1:19000/static/office3d.html
-#    2D: http://127.0.0.1:19000/office
+# 3. 打开看板（3D 微缩）
+#    http://127.0.0.1:19000/office  （等价 /static/office3d.html）
 ```
 
 接入 Claude Code：在 `~/.claude/settings.json` 的相关事件里追加调用 `hooks/cc_state_push.py`（详见 [RUNBOOK.md](RUNBOOK.md) 第八节，含一键回滚脚本）。
@@ -98,8 +97,7 @@ Antigravity / OpenClaw 走 webhook 直推 `/cc/push`。各工具配置位置、�
 ## 技术栈
 
 - 后端：Python 3 + Flask（纯文件状态，零数据库）
-- 2D：原生 Canvas 2D
-- 3D：[Three.js](https://threejs.org/) r160（本地 vendoring，无 CDN 运行时依赖）
+- 前端：[Three.js](https://threejs.org/) r160（本地 vendoring，无 CDN 运行时依赖）
 
 ## ⚠️ 素材与开源须知
 
